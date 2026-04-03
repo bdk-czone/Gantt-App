@@ -1,0 +1,19 @@
+{
+  "name": "projectflux",
+  "version": "1.0.0",
+  "description": "MyProPlanner - Full-stack planner with List and Gantt views",
+  "scripts": {
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "dev": "node scripts/dev.mjs",
+    "dev:full": "npm run db:start && npm run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "start:prod": "npm --prefix backend run start",
+    "db:start": "bash scripts/db-start.sh",
+    "db:stop": "bash scripts/db-stop.sh",
+    "setup:db": "npm --prefix backend exec ts-node src/runSqlFile.ts src/schema.sql",
+    "seed:db": "npm --prefix backend exec ts-node src/runSqlFile.ts src/seed.sql",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+  },
+  "private": true
+}

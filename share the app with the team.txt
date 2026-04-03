@@ -1,0 +1,23 @@
+Your app is now in its own standalone GitHub repo at [bdk-czone/Gantt-App](https://github.com/bdk-czone/Gantt-App). That means your colleague can clone just this app, without the larger `CS-Tier2` repo.
+
+Next steps:
+1. Keep the repo `Private` if you only want invited people to access it.
+2. In GitHub, open `Settings` > `Collaborators and teams` and invite your colleague.
+3. Tell them to clone it:
+```bash
+git clone https://github.com/bdk-czone/Gantt-App.git
+cd Gantt-App
+```
+4. Then they follow the setup guide in [INSTALL_FOR_COLLEAGUE.md](/Users/shlomibd/Library/CloudStorage/GoogleDrive-shlomibd@cloudzone.io/My%20Drive/CS-Tier2/Projects%20%26%20Tasks/Gantt-App/INSTALL_FOR_COLLEAGUE.md).
+
+From now on, your update flow is simple:
+```bash
+git add .
+git commit -m "Describe the change"
+git push
+```
+
+And their update flow is:
+```bash
+git pull
+```
