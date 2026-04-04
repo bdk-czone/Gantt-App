@@ -138,6 +138,9 @@ const CommunicationSection: React.FC<{
   const [analysisLoading, setAnalysisLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // 'gemini' = send screenshot to Gemini AI; 'local' = macOS OCR only
+  const [screenshotMode, setScreenshotMode] = React.useState<'gemini' | 'local'>('gemini');
+  const [ocrFallbackWarning, setOcrFallbackWarning] = React.useState<string | null>(null);
   const sortedEntries = React.useMemo(
     () =>
       [...section.entries].sort(
@@ -161,6 +164,7 @@ const CommunicationSection: React.FC<{
     setPastedEmail('');
     setPastedScreenshot(null);
     setPasteFeedback(null);
+    setOcrFallbackWarning(null);
     setComposerOpen(section.entries.length === 0);
     setError(null);
   }, [section.entries.length]);
@@ -171,6 +175,7 @@ const CommunicationSection: React.FC<{
     setPastedEmail('');
     setPastedScreenshot(null);
     setPasteFeedback(null);
+    setOcrFallbackWarning(null);
     setComposerOpen(false);
     setError(null);
   }, []);
@@ -282,6 +287,7 @@ const CommunicationSection: React.FC<{
 
     setAnalysisLoading(true);
     setError(null);
+    setOcrFallbackWarning(null);
 
     try {
       const aiDraft = await generateCommunicationAIDraft({
@@ -301,9 +307,40 @@ const CommunicationSection: React.FC<{
         summary: aiDraft.summary || undefined,
       });
       setPastedScreenshot(null);
-      setPasteFeedback('Screenshot analyzed and discarded. Review the drafted entry before saving.');
+      setPasteFeedback('Gemini analyzed the screenshot and prefilled the entry. Review and save when ready.');
     } catch (aiError) {
-      setError(aiError instanceof Error ? aiError.message : 'AI could not analyze that screenshot.');
+      // Show the AI error AND auto-fallback to local OCR
+      const geminiMessage = aiError instanceof Error ? aiError.message : 'Gemini could not analyze that screenshot.';
+      setOcrFallbackWarning(`Gemini failed (${geminiMessage}) — running local OCR as fallback…`);
+
+      try {
+        const extractedText = await extractCommunicationScreenshotText(pastedScreenshot);
+        if (!extractedText.trim()) {
+          setError('Both Gemini and local OCR could not read that screenshot.');
+          setOcrFallbackWarning(null);
+          return;
+        }
+        setPastedEmail(extractedText);
+        const parsed = parseCommunicationEmail(extractedText, { referenceEmails: section.referenceEmails });
+        if (parsed) {
+          applyDraftValues({
+            occurredAt: parsed.occurredAt ? toLocalDateTimeValue(parsed.occurredAt) : undefined,
+            direction: parsed.direction,
+            fromName: parsed.fromName,
+            fromEmail: parsed.fromEmail,
+            subject: parsed.subject,
+            summary: parsed.summary,
+          });
+          setPasteFeedback('Local OCR fallback filled the form. Gemini was unavailable — check the warning above.');
+        } else {
+          setPasteFeedback('Local OCR extracted the text. Fill any missing fields manually.');
+        }
+        setPastedScreenshot(null);
+        setOcrFallbackWarning(`Gemini was unavailable (${geminiMessage}). The entry was prefilled using local OCR instead.`);
+      } catch (ocrError) {
+        setError(`Both Gemini and local OCR failed. Gemini: ${geminiMessage}. OCR: ${ocrError instanceof Error ? ocrError.message : 'unknown error'}`);
+        setOcrFallbackWarning(null);
+      }
     } finally {
       setAnalysisLoading(false);
     }
@@ -577,8 +614,9 @@ const CommunicationSection: React.FC<{
                   onClick={() => void handleAITextAssist()}
                   disabled={!aiStatus?.configured || analysisLoading}
                   className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                  title={aiStatus?.configured ? `Improve wording with ${aiStatus.provider === 'gemini' ? 'Gemini' : 'AI'}` : 'Add GEMINI_API_KEY to backend/.env to enable'}
                 >
-                  {analysisLoading ? 'Working...' : 'AI wording help'}
+                  {analysisLoading ? 'Working…' : aiStatus?.provider === 'gemini' ? 'Gemini wording help' : 'AI wording help'}
                 </button>
                 {pastedEmail && (
                   <button
@@ -597,7 +635,7 @@ const CommunicationSection: React.FC<{
 
             {!aiStatus?.configured && (
               <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                AI wording help is off on this machine. You can still use local text parsing and local screenshot OCR without an API key.
+                Gemini wording help is off. Add <code className="rounded bg-amber-100 px-1 font-mono text-xs">GEMINI_API_KEY</code> to <code className="rounded bg-amber-100 px-1 font-mono text-xs">backend/.env</code> and restart the server to enable it. Local text parsing still works.
               </p>
             )}
 
@@ -621,21 +659,53 @@ const CommunicationSection: React.FC<{
               <div>
                 <h5 className="text-sm font-semibold text-slate-900">Paste screenshot to read the email</h5>
                 <p className="text-xs leading-5 text-slate-500">
-                  Click the box, paste a screenshot with `Cmd+V`, let AI draft the entry, and the image will be discarded after analysis.
+                  Click the box, paste a screenshot with <kbd className="rounded border border-slate-200 bg-slate-100 px-1 text-[10px]">Cmd+V</kbd>, and the image will be discarded after analysis.
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                {/* Mode toggle — only shown when AI is configured */}
+                {aiStatus?.configured && (
+                  <div className="flex rounded-full border border-slate-200 bg-slate-100 p-0.5 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setScreenshotMode('gemini')}
+                      className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
+                        screenshotMode === 'gemini'
+                          ? 'bg-white text-blue-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      Gemini AI
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setScreenshotMode('local')}
+                      className={`rounded-full px-2.5 py-1 font-medium transition-colors ${
+                        screenshotMode === 'local'
+                          ? 'bg-white text-slate-700 shadow-sm'
+                          : 'text-slate-500 hover:text-slate-700'
+                      }`}
+                    >
+                      Local OCR
+                    </button>
+                  </div>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => void (aiStatus?.configured ? handleAIScreenshotAssist() : handleLocalScreenshotAssist())}
+                  onClick={() => void (
+                    aiStatus?.configured && screenshotMode === 'gemini'
+                      ? handleAIScreenshotAssist()
+                      : handleLocalScreenshotAssist()
+                  )}
                   disabled={analysisLoading || !pastedScreenshot}
                   className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
                 >
                   {analysisLoading
-                    ? 'Working...'
-                    : aiStatus?.configured
-                      ? 'Analyze screenshot with AI'
+                    ? 'Analyzing…'
+                    : aiStatus?.configured && screenshotMode === 'gemini'
+                      ? 'Analyze with Gemini'
                       : 'Analyze screenshot locally'}
                 </button>
                 {pastedScreenshot && (
@@ -650,9 +720,25 @@ const CommunicationSection: React.FC<{
               </div>
             </div>
 
+            {/* Info banners */}
             {!aiStatus?.configured && (
               <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
-                No API key needed here. The screenshot will be read locally on this Mac using OCR, then discarded from the form after analysis.
+                No API key configured. The screenshot will be read locally on this Mac using OCR, then discarded.
+              </p>
+            )}
+            {aiStatus?.configured && screenshotMode === 'gemini' && (
+              <p className="mt-3 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                Gemini will analyze the screenshot directly for best accuracy. If Gemini fails, local OCR runs automatically as fallback.
+              </p>
+            )}
+            {aiStatus?.configured && screenshotMode === 'local' && (
+              <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                Local OCR only — screenshot never leaves your Mac. Switch to Gemini AI for better accuracy.
+              </p>
+            )}
+            {ocrFallbackWarning && (
+              <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                ⚠ {ocrFallbackWarning}
               </p>
             )}
 

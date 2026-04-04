@@ -7,6 +7,7 @@ import {
   FolderOpen,
   Layers,
   Loader2,
+  Pencil,
   Plus,
   Settings2,
   Trash2,
@@ -17,6 +18,7 @@ import {
   createSpace,
   createWorkspace,
   deleteList,
+  deleteWorkspace,
   getSpaceLists,
   getTaskTree,
   getWorkspaces,
@@ -27,6 +29,7 @@ import { EntityIcon, getAppearanceColor } from '../lib/appearance';
 import CreateProjectModal from './CreateProjectModal';
 import ProjectEditModal from './ProjectEditModal';
 import ResourcesPanel from './ResourcesPanel';
+import StickyNotesPanel from './StickyNotesPanel';
 
 interface SidebarProps {
   onSelectionChange: (selection: {
@@ -540,6 +543,23 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectionChange, defaultTaskTreeExp
     }
   };
 
+  const handleWorkspaceDelete = async (workspace: WorkspaceWithSpaces) => {
+    if (!confirm(`Delete workspace "${workspace.name}" and all its spaces and projects?`)) return;
+
+    try {
+      await deleteWorkspace(workspace.id);
+      const nextWorkspaceIds = new Set(selectedWorkspaceIdsRef.current);
+      nextWorkspaceIds.delete(workspace.id);
+      await loadWorkspaces({
+        workspaceIds: nextWorkspaceIds,
+        listIds: new Set(selectedListIdsRef.current),
+        fallbackToFirst: false,
+      });
+    } catch (err) {
+      console.error('Failed to delete workspace:', err);
+    }
+  };
+
   const loadProjectTasks = React.useCallback(async (projectId: string) => {
     if (projectTasks[projectId]) return;
 
@@ -610,12 +630,16 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectionChange, defaultTaskTreeExp
     <>
       <aside className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-slate-50">
         <div className="min-h-0 flex-1 overflow-y-auto py-2">
-          {workspaces.map((workspace) => {
+          {workspaces.map((workspace, workspaceIdx) => {
             const workspaceExpanded = expandedWorkspaces.has(workspace.id);
             const workspaceChecked = selectedWorkspaceIds.has(workspace.id);
 
             return (
-              <div key={workspace.id}>
+              <div key={workspace.id} className={workspaceIdx > 0 ? 'mt-6' : ''}>
+                {/* Colorful separator shown between workspaces */}
+                {workspaceIdx > 0 && (
+                  <div className="mx-3 mb-2 h-px rounded-full bg-gradient-to-r from-[#FF7A59] via-[#4F6BED] to-[#B54DFF] opacity-40" />
+                )}
                 <div
                   className={`group flex items-center transition-colors ${
                     workspaceChecked ? 'bg-indigo-50' : 'hover:bg-slate-100'
@@ -676,10 +700,30 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectionChange, defaultTaskTreeExp
                       startCreating({ type: 'space', workspaceId: workspace.id });
                       if (!workspaceExpanded) toggleWorkspace(workspace);
                     }}
-                    className="mr-2 rounded p-1 text-gray-400 opacity-0 transition-colors group-hover:opacity-100 hover:bg-slate-200 hover:text-indigo-600"
+                    className="rounded p-1 text-gray-400 opacity-0 transition-colors group-hover:opacity-100 hover:bg-slate-200 hover:text-indigo-600"
                     title="New space"
                   >
                     <Plus size={12} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startRename(workspace.id, 'workspace', workspace.name);
+                    }}
+                    className="rounded p-1 text-gray-400 opacity-0 transition-colors group-hover:opacity-100 hover:bg-slate-200 hover:text-gray-700"
+                    title="Rename workspace"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleWorkspaceDelete(workspace);
+                    }}
+                    className="mr-2 rounded p-1 text-gray-400 opacity-0 transition-colors group-hover:opacity-100 hover:bg-red-100 hover:text-red-600"
+                    title="Delete workspace"
+                  >
+                    <Trash2 size={12} />
                   </button>
                 </div>
 
@@ -889,6 +933,8 @@ const Sidebar: React.FC<SidebarProps> = ({ onSelectionChange, defaultTaskTreeExp
             <p className="px-4 py-3 text-xs text-gray-400">No workspaces found</p>
           )}
         </div>
+
+        <StickyNotesPanel />
 
         <div className="border-t border-gray-200 bg-white/60 px-4 py-3">
           <p className="text-xs text-gray-500">

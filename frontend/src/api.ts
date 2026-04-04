@@ -352,6 +352,9 @@ export async function getAllListsFlat(): Promise<FlatList[]> {
 export const renameWorkspace = (id: string, name: string) =>
   request(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
 
+export const deleteWorkspace = (id: string) =>
+  request(`/api/workspaces/${id}`, { method: 'DELETE' });
+
 export const renameSpace = (id: string, name: string) =>
   request(`/api/spaces/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
 
