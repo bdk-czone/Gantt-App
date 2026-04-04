@@ -21,3 +21,26 @@ And their update flow is:
 ```bash
 git pull
 ```
+
+
+
+Instructions for manuall install:
+
+Manual install, step by step:
+
+mkdir -p ~/Projects && cd ~/Projects
+git clone https://github.com/bdk-czone/Gantt-App.git
+cd Gantt-App
+npm run install:all
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env
+npm run db:start
+npm run setup:db
+Optional: npm run seed:db
+npm run dev:full
+What npm run dev:full does:
+
+It runs npm run db:start && npm run dev.
+npm run db:start starts the local PostgreSQL container through db-start.sh.
+npm run dev runs dev.mjs, which starts the backend dev server and the frontend Vite dev server in parallel.
+If the database is already running, npm run dev alone is enough.
