@@ -10,6 +10,7 @@ export interface ParsedCommunicationEntryDraft {
 }
 
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+const URL_PATTERN = /https?:\/\/[^\s<>"')]+/gi;
 const HEADER_KEYS = new Set(['from', 'sent', 'date', 'to', 'cc', 'subject']);
 const UI_NOISE_PATTERNS = [
   /^customer communication log$/i,
@@ -25,6 +26,9 @@ const UI_NOISE_PATTERNS = [
   /^filled the form from the pasted email/i,
   /^screenshot read locally/i,
   /^screenshot text was extracted locally/i,
+  /^summarize$/i,
+  /^you don't often get email from /i,
+  /^learn why this is important$/i,
 ];
 const SECTION_START_PATTERNS = [
   /^main points discussed$/i,
@@ -130,6 +134,21 @@ function extractDisplayName(value: string, email: string) {
   return value.trim();
 }
 
+function extractUrls(text: string) {
+  return Array.from(new Set((text.match(URL_PATTERN) ?? []).map((value) => value.trim())));
+}
+
+function appendUrls(summary: string, text: string) {
+  const urls = extractUrls(text);
+  if (urls.length === 0) return summary;
+
+  const missingUrls = urls.filter((url) => !summary.includes(url));
+  if (missingUrls.length === 0) return summary;
+  if (!summary) return missingUrls.join('\n');
+
+  return `${summary}\n${missingUrls.join('\n')}`;
+}
+
 function isUiNoiseLine(line: string) {
   return UI_NOISE_PATTERNS.some((pattern) => pattern.test(line));
 }
@@ -178,9 +197,24 @@ function findFirstEmailLine(lines: string[]) {
   return lines.map(normalizeToken).find((line) => extractFirstEmail(line)) ?? '';
 }
 
+function parseNameAndEmailLine(line: string) {
+  const email = extractFirstEmail(line);
+  if (!email) {
+    return {
+      fromName: '',
+      fromEmail: '',
+    };
+  }
+
+  return {
+    fromName: extractDisplayName(line, email),
+    fromEmail: email,
+  };
+}
+
 function extractDateCandidate(text: string) {
   const patterns = [
-    /\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\w*,?\s+\d{1,2}\s+\w+\s+\d{4}(?:\s+\d{1,2}:\d{2}(?:\s?[AP]M)?)?/i,
+    /\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\w*,?\s+\d{1,2}\s+\w+\s+\d{4}(?:\s+at|\s+בשעה)?(?:\s+\d{1,2}:\d{2}(?:\s?[AP]M)?)?/i,
     /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}(?:[,\s]+\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AP]M)?)?/i,
     /\b\d{4}-\d{2}-\d{2}(?:[T\s]+\d{1,2}:\d{2}(?::\d{2})?)?/i,
   ];
@@ -227,7 +261,54 @@ function shouldStopBodyCapture(line: string) {
 }
 
 function isGreetingLine(line: string) {
-  return /^(hi|hello|hey|dear)\b/i.test(line) && line.length <= 40;
+  return /^(hi|hello|hey|dear|shalom|שלום)\b/i.test(line) && line.length <= 40;
+}
+
+function buildFallbackSummary(text: string) {
+  const lines = normalizeLineEndings(text)
+    .split('\n')
+    .map(normalizeToken)
+    .filter(Boolean)
+    .filter((line) => !isLikelyMetadataLine(line))
+    .filter((line) => !isGreetingLine(line))
+    .filter((line) => !/^(thanks|thank you|best|regards|cheers|תודה|בברכה)\b/i.test(line));
+
+  const summary = lines.slice(0, 2).join(' ').replace(/\s+/g, ' ').trim();
+  return summary ? appendUrls(summary, text) : appendUrls('', text);
+}
+
+function extractTopSubjectCandidate(lines: string[]) {
+  for (const rawLine of lines.slice(0, 12)) {
+    const line = normalizeToken(rawLine);
+    if (!line) continue;
+    if (isUiNoiseLine(line) || isHeaderLabelLine(line)) continue;
+    if (extractFirstEmail(line)) continue;
+    if (extractDateCandidate(line)) continue;
+    if (/^(to|cc|from)\b/i.test(line)) continue;
+    if (line.length < 4) continue;
+    return line;
+  }
+
+  return '';
+}
+
+function buildFallbackSubject(subject: string, summary: string, lines: string[]) {
+  if (subject) return subject;
+
+  const topSubject = extractTopSubjectCandidate(lines);
+  if (topSubject) return topSubject;
+
+  const firstSentence = summary
+    .split('\n')
+    .flatMap((line) => line.split(/[.!?]/))
+    .map((line) => normalizeToken(line))
+    .find(Boolean);
+
+  if (firstSentence) {
+    return firstSentence.length <= 110 ? firstSentence : `${firstSentence.slice(0, 107).trimEnd()}...`;
+  }
+
+  return '';
 }
 
 function extractSummary(text: string) {
@@ -253,9 +334,9 @@ function extractSummary(text: string) {
 
     const sectionSummary = sectionLines.join(' ').replace(/\s+/g, ' ').trim();
     if (sectionSummary) {
-      return sectionSummary.length <= 240
-        ? sectionSummary
-        : `${sectionSummary.slice(0, 237).trimEnd()}...`;
+      const shortened =
+        sectionSummary.length <= 240 ? sectionSummary : `${sectionSummary.slice(0, 237).trimEnd()}...`;
+      return appendUrls(shortened, text);
     }
   }
 
@@ -276,12 +357,12 @@ function extractSummary(text: string) {
   }
 
   const summary = collected.join(' ').replace(/\s+/g, ' ').trim();
-  if (!summary) return '';
-  if (summary.length <= 240) return summary;
+  if (!summary) return buildFallbackSummary(text);
+  if (summary.length <= 240) return appendUrls(summary, text);
 
   const shortened = summary.slice(0, 237);
   const lastSpaceIndex = shortened.lastIndexOf(' ');
-  return `${(lastSpaceIndex > 120 ? shortened.slice(0, lastSpaceIndex) : shortened).trim()}...`;
+  return appendUrls(`${(lastSpaceIndex > 120 ? shortened.slice(0, lastSpaceIndex) : shortened).trim()}...`, text);
 }
 
 function parseOccurredAt(value: string) {
@@ -311,6 +392,7 @@ export function parseCommunicationEmail(
   const referenceEmails = new Set((options?.referenceEmails ?? []).map((email) => email.trim().toLowerCase()).filter(Boolean));
   const recipientEmails = [...extractAllEmails(toValue), ...extractAllEmails(ccValue)];
   const firstEmailInText = findFirstEmailLine(lines);
+  const firstNameEmailPair = firstEmailInText ? parseNameAndEmailLine(firstEmailInText) : { fromName: '', fromEmail: '' };
   const subjectLabelIndex = lines.findIndex((line) => normalizeToken(line).toLowerCase() === 'subject');
   const fallbackSubjectLine =
     findFirstMatchingLine(lines, /^(re|fw|fwd):/i) ||
@@ -325,12 +407,16 @@ export function parseCommunicationEmail(
 
   const result: ParsedCommunicationEntryDraft = {};
 
-  if (subjectValue) result.subject = subjectValue;
-  else if (fallbackSubjectLine) result.subject = normalizeToken(fallbackSubjectLine);
-  if (summary) result.summary = summary;
+  const normalizedFallbackSubject = fallbackSubjectLine ? normalizeToken(fallbackSubjectLine) : '';
+  const nextSummary = summary || buildFallbackSummary(normalizedText);
+  const nextSubject = buildFallbackSubject(subjectValue || normalizedFallbackSubject, nextSummary, lines);
+
+  if (nextSubject) result.subject = nextSubject;
+  if (nextSummary) result.summary = nextSummary;
   if (fromName) result.fromName = fromName;
+  else if (firstNameEmailPair.fromName) result.fromName = firstNameEmailPair.fromName;
   if (fromEmail) result.fromEmail = fromEmail;
-  else if (firstEmailInText) result.fromEmail = extractFirstEmail(firstEmailInText);
+  else if (firstNameEmailPair.fromEmail) result.fromEmail = firstNameEmailPair.fromEmail;
   if (direction) result.direction = direction;
 
   const occurredAt = parseOccurredAt(occurredAtValue);

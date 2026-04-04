@@ -29,7 +29,7 @@ guard let cgImage = image.cgImage(forProposedRect: &proposedRect, context: nil, 
 let request = VNRecognizeTextRequest()
 request.recognitionLevel = .accurate
 request.usesLanguageCorrection = true
-request.recognitionLanguages = ["en-US"]
+request.recognitionLanguages = ["en-US", "he-IL"]
 
 let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
 
