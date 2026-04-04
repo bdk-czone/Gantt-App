@@ -1,0 +1,595 @@
+## Gmail Links Integration - Complete Implementation Prompt
+
+Copy this entire prompt and paste it to Claude Code:
+
+---
+
+# IMPLEMENTATION TASK: Add "Outlook" View with Gmail Search Links
+
+## CONTEXT
+
+I have a full-stack project management app called MyProPlanner. It currently has two views: List and Gantt. I need to add a third view called "Outlook" that helps me quickly access Gmail conversations related to each project.
+
+**Current Tech Stack:**
+- Frontend: React 18 + TypeScript + Vite + Tailwind CSS
+- Backend: Node.js + Express + TypeScript
+- Database: PostgreSQL (Docker)
+- Current views: List, Gantt (stored in localStorage as user preference)
+
+**Current Architecture:**
+- View switching happens in `frontend/src/App.tsx`
+- Database schema migrations in `backend/src/ensureSchema.ts` (idempotent patches)
+- API routes in `backend/src/routes/`
+- Frontend components in `frontend/src/components/`
+
+## REQUIREMENT
+
+Add a third view option called "Outlook" that:
+1. Lets me configure customer email addresses and keywords per project
+2. Generates a Gmail search URL based on those parameters
+3. Opens Gmail in a new tab with pre-filtered results
+4. Shows helpful info about what emails will be searched
+
+**Key Constraint:** This is a SIMPLE implementation using Gmail search URLs - NO Gmail API, NO OAuth, NO backend email fetching. Just smart URL construction.
+
+## IMPLEMENTATION STEPS
+
+### STEP 1: Database Schema Changes
+
+**File to modify:** `backend/src/ensureSchema.ts`
+
+Add these two patches to the `SCHEMA_PATCHES` array:
+
+```typescript
+// Add after existing patches, before the closing bracket
+
+// Patch: Add customer email fields to projects
+`ALTER TABLE lists 
+ ADD COLUMN IF NOT EXISTS customer_emails TEXT[] DEFAULT '{}',
+ ADD COLUMN IF NOT EXISTS customer_keywords TEXT[] DEFAULT '{}'`,
+
+// Patch: Add index for faster project queries
+`CREATE INDEX IF NOT EXISTS idx_lists_customer_emails ON lists USING GIN(customer_emails)`
+```
+
+**Verification:** When the backend starts, these patches should run automatically via `ensureSchema()`.
+
+### STEP 2: Backend API Routes
+
+**File to create:** `backend/src/routes/outlook.ts`
+
+```typescript
+import { Router } from 'express';
+import { pool } from '../db';
+
+const router = Router();
+
+// Get Outlook settings for a project
+router.get('/lists/:listId/outlook-settings', async (req, res) => {
+  try {
+    const { listId } = req.params;
+    
+    const result = await pool.query(
+      'SELECT customer_emails, customer_keywords FROM lists WHERE id = $1',
+      [listId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    res.json({
+      customer_emails: result.rows[0].customer_emails || [],
+      customer_keywords: result.rows[0].customer_keywords || []
+    });
+  } catch (error) {
+    console.error('Error fetching Outlook settings:', error);
+    res.status(500).json({ error: 'Failed to fetch Outlook settings' });
+  }
+});
+
+// Update Outlook settings for a project
+router.patch('/lists/:listId/outlook-settings', async (req, res) => {
+  try {
+    const { listId } = req.params;
+    const { customer_emails, customer_keywords } = req.body;
+    
+    // Validate email format (basic check)
+    if (customer_emails && Array.isArray(customer_emails)) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const invalidEmails = customer_emails.filter(email => !emailRegex.test(email));
+      if (invalidEmails.length > 0) {
+        return res.status(400).json({ 
+          error: `Invalid email addresses: ${invalidEmails.join(', ')}` 
+        });
+      }
+    }
+    
+    const result = await pool.query(
+      `UPDATE lists 
+       SET customer_emails = $1, customer_keywords = $2
+       WHERE id = $3
+       RETURNING id, name, customer_emails, customer_keywords`,
+      [customer_emails || [], customer_keywords || [], listId]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating Outlook settings:', error);
+    res.status(500).json({ error: 'Failed to update Outlook settings' });
+  }
+});
+
+export default router;
+```
+
+**File to modify:** `backend/src/index.ts`
+
+Add the new routes to the Express app. Find the section where routes are mounted (likely around where you see `app.use('/api/workspaces', ...)`) and add:
+
+```typescript
+import outlookRoutes from './routes/outlook';
+
+// Add with other route mounts
+app.use('/api', outlookRoutes);
+```
+
+### STEP 3: Frontend API Client
+
+**File to modify:** `frontend/src/api.ts`
+
+Add these type definitions and API functions:
+
+```typescript
+// Add to type definitions section
+export interface OutlookSettings {
+  customer_emails: string[];
+  customer_keywords: string[];
+}
+
+// Add to API functions section
+export async function getOutlookSettings(listId: string): Promise<OutlookSettings> {
+  return request<OutlookSettings>(`/api/lists/${listId}/outlook-settings`);
+}
+
+export async function updateOutlookSettings(
+  listId: string, 
+  settings: OutlookSettings
+): Promise<void> {
+  return request(`/api/lists/${listId}/outlook-settings`, {
+    method: 'PATCH',
+    body: JSON.stringify(settings)
+  });
+}
+```
+
+### STEP 4: Outlook View Component
+
+**File to create:** `frontend/src/components/OutlookView.tsx`
+
+```typescript
+import React, { useState, useEffect } from 'react';
+import { getOutlookSettings, type OutlookSettings } from '../api';
+import { Mail, ExternalLink, Settings, Calendar } from 'lucide-react';
+
+interface OutlookViewProps {
+  selectedListId: string | null;
+}
+
+export function OutlookView({ selectedListId }: OutlookViewProps) {
+  const [settings, setSettings] = useState<OutlookSettings>({
+    customer_emails: [],
+    customer_keywords: []
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedListId) {
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    
+    getOutlookSettings(selectedListId)
+      .then(setSettings)
+      .catch(err => {
+        console.error('Failed to load Outlook settings:', err);
+        setError('Failed to load email settings');
+      })
+      .finally(() => setIsLoading(false));
+  }, [selectedListId]);
+
+  if (!selectedListId) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center text-gray-500">
+          <Mail className="w-16 h-16 mx-auto mb-4 opacity-50" />
+          <p>Select a project to view email conversations</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-gray-500">Loading email settings...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-red-500">{error}</div>
+      </div>
+    );
+  }
+
+  const hasConfiguration = 
+    settings.customer_emails.length > 0 || 
+    settings.customer_keywords.length > 0;
+
+  const gmailUrl = buildGmailSearchUrl(settings);
+
+  return (
+    <div className="flex flex-col items-center justify-center h-full p-8 max-w-2xl mx-auto">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <Mail className="w-20 h-20 mx-auto mb-4 text-blue-600" />
+        <h2 className="text-3xl font-semibold mb-2">Email Conversations</h2>
+        <p className="text-gray-600">
+          View Gmail conversations related to this project
+        </p>
+      </div>
+
+      {/* Configuration Summary */}
+      <div className="w-full bg-gray-50 rounded-lg p-6 mb-6 border border-gray-200">
+        <h3 className="font-semibold mb-3 flex items-center">
+          <Settings className="w-4 h-4 mr-2" />
+          Search Configuration
+        </h3>
+        
+        {hasConfiguration ? (
+          <ul className="space-y-2 text-sm text-gray-700">
+            {settings.customer_emails.length > 0 && (
+              <li>
+                <span className="font-medium">Email addresses:</span>
+                <ul className="ml-4 mt-1 space-y-1">
+                  {settings.customer_emails.map(email => (
+                    <li key={email} className="flex items-center">
+                      <Mail className="w-3 h-3 mr-2 text-gray-400" />
+                      {email}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            )}
+            
+            {settings.customer_keywords.length > 0 && (
+              <li>
+                <span className="font-medium">Keywords:</span>
+                <ul className="ml-4 mt-1 space-y-1">
+                  {settings.customer_keywords.map(keyword => (
+                    <li key={keyword} className="flex items-center">
+                      <span className="text-gray-600">"{keyword}"</span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            )}
+            
+            <li className="flex items-center pt-2 border-t border-gray-300">
+              <Calendar className="w-3 h-3 mr-2 text-gray-400" />
+              <span className="font-medium">Date range:</span>
+              <span className="ml-2 text-gray-600">Last 40 days</span>
+            </li>
+          </ul>
+        ) : (
+          <p className="text-sm text-gray-500 italic">
+            No email addresses or keywords configured yet. 
+            Configure them in Project Settings to enable email search.
+          </p>
+        )}
+      </div>
+
+      {/* Action Button */}
+      <button
+        onClick={() => window.open(gmailUrl, '_blank', 'noopener,noreferrer')}
+        disabled={!hasConfiguration}
+        className={`
+          flex items-center gap-2 px-8 py-4 rounded-lg font-medium
+          transition-all duration-200 transform hover:scale-105
+          ${hasConfiguration
+            ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg hover:shadow-xl'
+            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          }
+        `}
+      >
+        <Mail className="w-5 h-5" />
+        Open in Gmail
+        <ExternalLink className="w-4 h-4" />
+      </button>
+
+      {/* Help Text */}
+      <p className="mt-6 text-sm text-gray-500 text-center max-w-md">
+        This will open Gmail in a new tab with emails filtered by the configured 
+        addresses and keywords. All filtering happens in Gmail using their search operators.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Builds a Gmail search URL from Outlook settings
+ */
+function buildGmailSearchUrl(settings: OutlookSettings): string {
+  const searchParts: string[] = [];
+  
+  // Add email address filters (from: OR to:)
+  if (settings.customer_emails.length > 0) {
+    const emails = settings.customer_emails.join(' OR ');
+    searchParts.push(`(from:(${emails}) OR to:(${emails}))`);
+  }
+  
+  // Add keyword filters (in subject or body)
+  if (settings.customer_keywords.length > 0) {
+    const keywords = settings.customer_keywords.join(' OR ');
+    searchParts.push(`(${keywords})`);
+  }
+  
+  // Add date filter (last 40 days)
+  const fortyDaysAgo = new Date();
+  fortyDaysAgo.setDate(fortyDaysAgo.getDate() - 40);
+  const dateStr = fortyDaysAgo.toISOString().split('T')[0].replace(/-/g, '/');
+  searchParts.push(`after:${dateStr}`);
+  
+  const searchQuery = searchParts.join(' ');
+  const encodedQuery = encodeURIComponent(searchQuery);
+  
+  return `https://mail.google.com/mail/u/0/#search/${encodedQuery}`;
+}
+```
+
+### STEP 5: Add Outlook Settings to Project Modal
+
+**File to modify:** Find your project settings/edit modal component (likely `frontend/src/components/ProjectSettingsModal.tsx` or similar)
+
+Add this section to the modal form:
+
+```typescript
+// Add state for Outlook settings
+const [customerEmails, setCustomerEmails] = useState<string>('');
+const [customerKeywords, setCustomerKeywords] = useState<string>('');
+
+// Load existing settings when modal opens
+useEffect(() => {
+  if (project) {
+    // Fetch and populate Outlook settings
+    getOutlookSettings(project.id).then(settings => {
+      setCustomerEmails(settings.customer_emails.join(', '));
+      setCustomerKeywords(settings.customer_keywords.join(', '));
+    });
+  }
+}, [project]);
+
+// Add to the save handler
+const handleSave = async () => {
+  // ... existing save logic ...
+  
+  // Save Outlook settings
+  const emails = customerEmails
+    .split(',')
+    .map(e => e.trim())
+    .filter(e => e.length > 0);
+  
+  const keywords = customerKeywords
+    .split(',')
+    .map(k => k.trim())
+    .filter(k => k.length > 0);
+  
+  await updateOutlookSettings(project.id, {
+    customer_emails: emails,
+    customer_keywords: keywords
+  });
+  
+  // ... rest of save logic ...
+};
+
+// Add to the modal JSX (after other fields)
+<div className="space-y-4 border-t pt-4 mt-4">
+  <h3 className="font-semibold text-sm text-gray-700">Email Integration</h3>
+  
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      Customer Email Addresses
+    </label>
+    <input
+      type="text"
+      value={customerEmails}
+      onChange={e => setCustomerEmails(e.target.value)}
+      placeholder="julia@cloudzone.io, alex@cloudzone.io"
+      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+    />
+    <p className="text-xs text-gray-500 mt-1">
+      Comma-separated email addresses to track for this project
+    </p>
+  </div>
+  
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      Search Keywords (Optional)
+    </label>
+    <input
+      type="text"
+      value={customerKeywords}
+      onChange={e => setCustomerKeywords(e.target.value)}
+      placeholder="CloudZone, Project Alpha"
+      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+    />
+    <p className="text-xs text-gray-500 mt-1">
+      Keywords to help filter relevant emails (optional)
+    </p>
+  </div>
+</div>
+```
+
+### STEP 6: Integrate Outlook View into App
+
+**File to modify:** `frontend/src/App.tsx`
+
+Find the view mode state management section and add Outlook:
+
+```typescript
+// Update the ViewMode type (if it exists as a type definition)
+type ViewMode = 'list' | 'gantt' | 'outlook';
+
+// In the view switching logic, add Outlook case:
+{viewMode === 'outlook' && (
+  <OutlookView selectedListId={selectedListId} />
+)}
+
+// Update the view switcher buttons (find the existing List/Gantt toggle)
+<div className="flex items-center gap-2">
+  <button
+    onClick={() => setViewMode('list')}
+    className={viewMode === 'list' ? 'active-class' : 'inactive-class'}
+  >
+    List
+  </button>
+  <button
+    onClick={() => setViewMode('gantt')}
+    className={viewMode === 'gantt' ? 'active-class' : 'inactive-class'}
+  >
+    Gantt
+  </button>
+  <button
+    onClick={() => setViewMode('outlook')}
+    className={viewMode === 'outlook' ? 'active-class' : 'inactive-class'}
+  >
+    <Mail className="w-4 h-4 mr-1" />
+    Outlook
+  </button>
+</div>
+```
+
+**Important:** Import the new component at the top of `App.tsx`:
+```typescript
+import { OutlookView } from './components/OutlookView';
+import { Mail } from 'lucide-react';
+```
+
+### STEP 7: Update localStorage Persistence
+
+**File to modify:** `frontend/src/App.tsx` (or wherever view mode is persisted)
+
+Update the localStorage logic to handle the new view mode:
+
+```typescript
+// When loading view mode from localStorage
+const savedView = localStorage.getItem('viewMode') as ViewMode | null;
+if (savedView && ['list', 'gantt', 'outlook'].includes(savedView)) {
+  setViewMode(savedView);
+}
+
+// When saving view mode
+useEffect(() => {
+  localStorage.setItem('viewMode', viewMode);
+}, [viewMode]);
+```
+
+## TESTING CHECKLIST
+
+After implementation, verify these work:
+
+### Backend Testing
+- [ ] Run `npm run dev:backend` - no TypeScript errors
+- [ ] Backend starts successfully and runs schema patches
+- [ ] Check database: `lists` table has `customer_emails` and `customer_keywords` columns
+- [ ] Test API endpoint: `GET /api/lists/{id}/outlook-settings` returns 200
+- [ ] Test API endpoint: `PATCH /api/lists/{id}/outlook-settings` accepts email array
+
+### Frontend Testing
+- [ ] Run `npm run dev:frontend` - no TypeScript errors
+- [ ] Can switch to Outlook view from List/Gantt
+- [ ] Outlook view shows "Select a project" when no project selected
+- [ ] Open project settings modal, see email configuration fields
+- [ ] Add emails: `test@example.com, another@example.com`
+- [ ] Add keywords: `TestProject, Phase1`
+- [ ] Save settings successfully
+- [ ] Switch to Outlook view, verify configuration displays
+- [ ] Click "Open in Gmail" button
+- [ ] Gmail opens in new tab with correct search filters
+- [ ] Verify URL contains: `from:(test@example.com OR another@example.com)`
+- [ ] View mode persists after page refresh
+
+### Gmail URL Validation
+Open the generated Gmail URL and verify it shows:
+- Emails from OR to the configured addresses
+- Emails containing the keywords (if configured)
+- Emails from the last 40 days only
+
+## COMMON ISSUES & FIXES
+
+**Issue:** TypeScript errors on `customer_emails` field  
+**Fix:** Make sure you updated the `List` interface in `frontend/src/types.ts`:
+```typescript
+export interface List {
+  // ... existing fields ...
+  customer_emails?: string[];
+  customer_keywords?: string[];
+}
+```
+
+**Issue:** View mode doesn't persist  
+**Fix:** Check browser console for localStorage errors, verify the view mode state updates correctly
+
+**Issue:** Gmail URL doesn't filter correctly  
+**Fix:** Check the console.log output of `buildGmailSearchUrl()` - verify the encoded URL structure
+
+**Issue:** Backend 404 on Outlook settings endpoint  
+**Fix:** Verify the route is mounted in `index.ts` and the path matches `/api/lists/:listId/outlook-settings`
+
+## ACCEPTANCE CRITERIA
+
+This task is complete when:
+1. ✅ Database has new columns for email settings
+2. ✅ Backend API endpoints return/update email settings
+3. ✅ Project settings modal has email configuration fields
+4. ✅ Outlook view displays when selected
+5. ✅ Gmail opens with correct search filters
+6. ✅ View mode persists across page refreshes
+7. ✅ No TypeScript compilation errors
+8. ✅ No runtime errors in browser console
+
+## DELIVERABLE
+
+When finished, provide:
+1. List of files created/modified
+2. Any deviations from the spec (if needed for technical reasons)
+3. Screenshot of the Outlook view
+4. Sample Gmail URL generated from test data
+
+---
+
+**END OF IMPLEMENTATION PROMPT**
+
+---
+
+## How to Use This Prompt
+
+1. **Copy the entire section above** (from "# IMPLEMENTATION TASK" to "END OF IMPLEMENTATION PROMPT")
+2. **Open Claude Code** (or GPT with code execution)
+3. **Paste the prompt**
+4. Claude Code will implement all the changes file by file
+5. **Review each change** before accepting
+6. **Run the testing checklist** to verify everything works
+
+**Estimated Implementation Time:** 1-2 hours (mostly automated by Claude Code, you just review)
