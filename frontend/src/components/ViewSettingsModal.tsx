@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowDown,
   ArrowUp,
+  BarChart2,
   CalendarRange,
   ChevronRight,
   Columns,
@@ -43,6 +44,9 @@ interface ViewSettingsModalProps {
   };
   onClose: () => void;
   onSaved: () => void;
+  viewType?: 'list' | 'gantt';
+  currentViewName?: string;
+  overviewContent?: React.ReactNode;
 }
 
 type DrawerPanel = 'overview' | 'fields' | 'statuses' | 'layout' | 'schedule' | 'views' | 'filter' | 'group';
@@ -156,7 +160,14 @@ const NavigationRow: React.FC<{
   </button>
 );
 
-const ViewSettingsModal: React.FC<ViewSettingsModalProps> = ({ project, onClose, onSaved }) => {
+const ViewSettingsModal: React.FC<ViewSettingsModalProps> = ({
+  project,
+  onClose,
+  onSaved,
+  viewType = 'list',
+  currentViewName = 'Working view',
+  overviewContent,
+}) => {
   const initialSettings = React.useMemo(() => normalizeProjectSettings(project.settings), [project.settings]);
   const initialSchedule = React.useMemo(
     () => resolveProjectSchedule(project.start_date, project.end_date, project.settings),
@@ -340,6 +351,12 @@ const ViewSettingsModal: React.FC<ViewSettingsModalProps> = ({ project, onClose,
     }
   };
 
+  const currentViewTypeLabel = viewType === 'gantt' ? 'Gantt' : 'List';
+  const currentViewSummary =
+    savedViews.length > 0
+      ? `${currentViewTypeLabel} view · ${savedViews.length} saved view${savedViews.length === 1 ? '' : 's'} available`
+      : `${currentViewTypeLabel} view · Working changes stay in this project until you save them as a reusable view`;
+
   const panelTitle =
     panel === 'overview'
       ? 'Customize view'
@@ -360,7 +377,7 @@ const ViewSettingsModal: React.FC<ViewSettingsModalProps> = ({ project, onClose,
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-slate-950/30 backdrop-blur-[1px]" onClick={onClose} />
-      <div className="relative flex h-full w-full max-w-[32rem] flex-col border-l border-slate-200 bg-white shadow-2xl">
+      <div className="relative flex h-full w-full max-w-[30rem] flex-col overflow-hidden rounded-l-[1.75rem] border-l border-slate-200 bg-slate-50 shadow-2xl">
         <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -384,72 +401,54 @@ const ViewSettingsModal: React.FC<ViewSettingsModalProps> = ({ project, onClose,
         </div>
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-          <div className="flex-1 space-y-5 overflow-x-hidden overflow-y-auto px-4 py-4">
+          <div className="flex-1 space-y-5 overflow-x-hidden overflow-y-auto bg-slate-50 px-4 py-4">
             {error && <p className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}
 
-            {panel === 'overview' && (
+                        {panel === 'overview' && (
               <>
                 <section className="space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">View selector</p>
-                  <div className="flex items-center gap-2.5 overflow-hidden rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-sm">
-                    <span className="shrink-0 rounded-lg bg-slate-100 p-1.5 text-slate-600">
-                      <List size={16} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-medium text-slate-800">Current view</p>
-                      <p className="truncate text-[11px] text-slate-500">
-                        {savedViews.length > 0 ? `${savedViews.length} saved view${savedViews.length === 1 ? '' : 's'} available` : 'Unsaved view settings'}
-                      </p>
-                    </div>
-                  </div>
-                  <details className="overflow-hidden rounded-[1.25rem] border border-slate-200 bg-white">
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-left">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Current view</p>
+                  <div className="rounded-[1.45rem] border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex items-start gap-3">
+                      <span className="shrink-0 rounded-xl bg-slate-100 p-2 text-slate-700">
+                        {viewType === 'gantt' ? <BarChart2 size={18} /> : <List size={18} />}
+                      </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-900">View options</p>
-                        <p className="break-words text-xs text-slate-500">Autosave, pin, and privacy controls</p>
+                        <p className="truncate text-sm font-semibold text-slate-900">{currentViewName}</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">{currentViewSummary}</p>
                       </div>
-                      <ChevronRight size={16} className="shrink-0 text-slate-400" />
-                    </summary>
-                    <div className="border-t border-slate-100 px-2 py-2">
-                      <SwitchRow
-                        label="Autosave"
-                        description="Keep this project’s current view preferences synced automatically."
-                        checked={viewPersistence.autosave}
-                        onToggle={() => setViewPersistence((current) => ({ ...current, autosave: !current.autosave }))}
-                      />
-                      <SwitchRow
-                        label="Pin"
-                        description="Treat this as a preferred default view setup."
-                        checked={viewPersistence.pinned}
-                        onToggle={() => setViewPersistence((current) => ({ ...current, pinned: !current.pinned }))}
-                      />
-                      <SwitchRow
-                        label="Private"
-                        description="Keep the saved view setup scoped to your own workspace defaults."
-                        checked={viewPersistence.private}
-                        onToggle={() => setViewPersistence((current) => ({ ...current, private: !current.private }))}
-                      />
                     </div>
-                  </details>
+                  </div>
                 </section>
 
+                {overviewContent}
+
                 <section className="space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Show in this view</p>
-                  <div className="rounded-[1.4rem] border border-slate-200 bg-white p-2">
-                    {BUILT_IN_ROW_ORDER.filter((key) => key !== 'gantt_task').map((key) => (
-                      <SwitchRow
-                        key={key}
-                        label={columnLabels[key] || DEFAULT_COLUMN_LABELS[key] || key}
-                        description={getColumnTypeLabel(builtInColumnTypes[key] ?? DEFAULT_BUILT_IN_COLUMN_TYPES[key as keyof typeof DEFAULT_BUILT_IN_COLUMN_TYPES])}
-                        checked={!hiddenBuiltInColumns.includes(key)}
-                        onToggle={() => toggleBuiltInColumnVisibility(key)}
-                      />
-                    ))}
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">View behavior</p>
+                  <div className="rounded-[1.4rem] border border-slate-200 bg-white p-1.5 shadow-sm">
+                    <SwitchRow
+                      label="Autosave"
+                      description="Keep this project’s current view preferences synced automatically."
+                      checked={viewPersistence.autosave}
+                      onToggle={() => setViewPersistence((current) => ({ ...current, autosave: !current.autosave }))}
+                    />
+                    <SwitchRow
+                      label="Pin"
+                      description="Treat this as a preferred default view setup."
+                      checked={viewPersistence.pinned}
+                      onToggle={() => setViewPersistence((current) => ({ ...current, pinned: !current.pinned }))}
+                    />
+                    <SwitchRow
+                      label="Private"
+                      description="Keep the saved view setup scoped to your own workspace defaults."
+                      checked={viewPersistence.private}
+                      onToggle={() => setViewPersistence((current) => ({ ...current, private: !current.private }))}
+                    />
                   </div>
                 </section>
 
                 <section className="space-y-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Menu</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Customize</p>
                   <div className="space-y-2">
                     <NavigationRow icon={<Columns size={16} />} label="Fields" badge={`${customFields.length} custom · ${hiddenBuiltIns.length} hidden built-ins`} onClick={() => setPanel('fields')} />
                     <NavigationRow icon={<Filter size={16} />} label="Filter" badge={`${savedViews.length} saved view preset${savedViews.length === 1 ? '' : 's'}`} onClick={() => setPanel('filter')} />
@@ -459,6 +458,28 @@ const ViewSettingsModal: React.FC<ViewSettingsModalProps> = ({ project, onClose,
                     <NavigationRow icon={<List size={16} />} label="Saved views" badge={`${savedViews.length} saved`} onClick={() => setPanel('views')} />
                     <NavigationRow icon={<Columns size={16} />} label="Column layout" badge={`${orderedColumnItems.length} columns in order`} onClick={() => setPanel('layout')} />
                   </div>
+                </section>
+
+                <section className="space-y-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Utilities</p>
+                  <button
+                    type="button"
+                    onClick={() => void handleCopyLink()}
+                    className="flex w-full items-center justify-between gap-3 rounded-[1.2rem] border border-slate-200 bg-white px-4 py-3 text-left transition-colors hover:bg-slate-50"
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className="rounded-xl bg-slate-100 p-2 text-slate-700">
+                        <Link2 size={15} />
+                      </span>
+                      <span>
+                        <span className="block text-sm font-medium text-slate-900">Copy link to view</span>
+                        <span className="block text-xs text-slate-500">Share this setup or keep a quick pointer to it.</span>
+                      </span>
+                    </span>
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${copiedLink ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-600'}`}>
+                      {copiedLink ? 'Copied' : 'Copy'}
+                    </span>
+                  </button>
                 </section>
               </>
             )}
@@ -826,17 +847,8 @@ const ViewSettingsModal: React.FC<ViewSettingsModalProps> = ({ project, onClose,
             )}
           </div>
 
-          <div className="shrink-0 border-t border-slate-200 bg-white px-5 py-4">
-            <button
-              type="button"
-              onClick={() => void handleCopyLink()}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-600 transition-colors hover:bg-slate-50"
-            >
-              <Link2 size={14} />
-              {copiedLink ? 'Link copied' : 'Copy link'}
-            </button>
-
-            <div className="mt-4 flex justify-end gap-2">
+          <div className="shrink-0 border-t border-slate-200 bg-white/92 px-5 py-4 backdrop-blur">
+            <div className="flex justify-end gap-2">
               <button
                 type="button"
                 onClick={onClose}

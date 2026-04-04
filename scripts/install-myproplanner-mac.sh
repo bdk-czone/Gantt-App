@@ -5,9 +5,10 @@ set -euo pipefail
 APP_NAME="MyProPlanner"
 DEFAULT_REPO_SLUG="${MYPROPLANNER_REPO_SLUG:-bdk-czone/Gantt-App}"
 DEFAULT_BRANCH="${MYPROPLANNER_BRANCH:-main}"
-DEFAULT_CLONE_DIR="${MYPROPLANNER_CLONE_DIR:-$HOME/Gantt-App}"
+DEFAULT_CLONE_DIR="${MYPROPLANNER_CLONE_DIR:-$PWD/Gantt-App}"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 
 REPO_SLUG="$DEFAULT_REPO_SLUG"
 BRANCH="$DEFAULT_BRANCH"
@@ -217,6 +218,20 @@ is_repo_root() {
   [[ -f "$1/package.json" && -d "$1/backend" && -d "$1/frontend" ]]
 }
 
+resolve_user_path() {
+  local input="$1"
+
+  if [[ "$input" == ~* ]]; then
+    input="$HOME${input#\~}"
+  fi
+
+  if [[ "$input" != /* ]]; then
+    input="$PWD/$input"
+  fi
+
+  printf '%s\n' "$input"
+}
+
 choose_repo_root() {
   if is_repo_root "$PWD"; then
     REPO_ROOT="$PWD"
@@ -225,11 +240,21 @@ choose_repo_root() {
     return 0
   fi
 
+  if is_repo_root "$SCRIPT_REPO_ROOT"; then
+    REPO_ROOT="$SCRIPT_REPO_ROOT"
+    say "Using the repo next to this installer:"
+    say "$REPO_ROOT"
+    return 0
+  fi
+
   ensure_repo_access
 
+  CLONE_DIR="$(resolve_user_path "$CLONE_DIR")"
+  say "Default clone location:"
+  say "$CLONE_DIR"
   read -r -p "Where should the repo be cloned? [$CLONE_DIR] " reply
   if [[ -n "${reply:-}" ]]; then
-    CLONE_DIR="$reply"
+    CLONE_DIR="$(resolve_user_path "$reply")"
   fi
 
   if [[ -d "$CLONE_DIR/.git" ]]; then
@@ -250,6 +275,8 @@ choose_repo_root() {
   mkdir -p "$(dirname "$CLONE_DIR")"
   gh repo clone "$REPO_SLUG" "$CLONE_DIR" -- --branch "$BRANCH"
   REPO_ROOT="$CLONE_DIR"
+  say "Repository cloned to:"
+  say "$REPO_ROOT"
 }
 
 ensure_env_file() {
@@ -316,13 +343,13 @@ main() {
   fi
 
   if confirm "Start the app now? This will keep the terminal open while the app runs."; then
-    npm run dev
+    npm run dev:full
   else
     say
     say "Setup finished."
     say "When you are ready to run the app:"
     say "  cd \"$REPO_ROOT\""
-    say "  npm run dev"
+    say "  npm run dev:full"
   fi
 }
 

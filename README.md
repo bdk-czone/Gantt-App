@@ -5,8 +5,12 @@ MyProPlanner is a full-stack planning app for managing projects, tasks, and sche
 It is designed for teams that want a lightweight planner with hierarchical tasks, dependency-aware scheduling, reusable project templates, and a cleaner planning workflow than a spreadsheet.
 
 
-### to run the app:  
+### Quick start
+
+```bash
+cd /path/to/Gantt-App
 npm run dev:full
+```
 
 
 ## Project Outline
@@ -243,6 +247,11 @@ All API calls from the frontend go through `frontend/src/api.ts`. That file:
 - Node.js 18+
 - npm
 - Docker Desktop, OrbStack, or Colima + Docker CLI
+- GitHub access to `bdk-czone/Gantt-App` if you are cloning the private repo yourself
+
+Important:
+- all commands below assume you are inside the repo root
+- if you cloned into `~/Projects/Gantt-App`, run `cd ~/Projects/Gantt-App` first
 
 ### Recommended Mac Installer
 
@@ -265,17 +274,26 @@ What it does:
 - optionally seeds demo data
 - optionally runs the app
 
-If you want the same script to handle cloning too, send `scripts/install-myproplanner-mac.sh` as a standalone file to the teammate. It includes the clone flow as well.
+If you send the same script as a standalone file before cloning, it now defaults the clone target to the folder where the user launched the script, plus `/Gantt-App`.
 
 ### Manual Setup
 
-### 1. Install Dependencies
+### 1. Clone the repo and enter it
+
+```bash
+mkdir -p ~/Projects
+cd ~/Projects
+git clone https://github.com/bdk-czone/Gantt-App.git
+cd Gantt-App
+```
+
+### 2. Install dependencies
 
 ```bash
 npm run install:all
 ```
 
-### 2. Create Local Environment Files
+### 3. Create local environment files
 
 Backend:
 
@@ -291,37 +309,30 @@ cp frontend/.env.example frontend/.env
 
 Defaults:
 
-- Backend API: proxied through the frontend as `/api` in local dev
+- Backend API: `http://localhost:3001`
 - Frontend app: `http://localhost:5173`
 - Database: `postgresql://postgres:postgres@localhost:5432/projectflux`
+- Frontend API URL: empty in local dev, so Vite proxies `/api` to the backend
 
-### 3. Start PostgreSQL
+### 4. Start PostgreSQL
 
 ```bash
 npm run db:start
 ```
 
-### 4. Create The Schema
+### 5. Create the schema
 
 ```bash
 npm run setup:db
 ```
 
-### 5. Seed Sample Data (Optional)
+### 6. Seed sample data (optional)
 
 ```bash
 npm run seed:db
 ```
 
-### 6. Run The App
-
-Run frontend and backend together in one command:
-
-```bash
-npm run dev
-```
-
-If you want to start Postgres and both app servers in one step:
+### 7. Run the app
 
 ```bash
 npm run dev:full
@@ -331,6 +342,34 @@ Open:
 
 - Frontend: [http://localhost:5173](http://localhost:5173)
 - Backend health check: [http://localhost:3001/api/health](http://localhost:3001/api/health)
+
+### 8. First run
+
+On the first app launch, MyProPlanner will ask you to create the local passkey for that instance.
+
+### What `npm run dev:full` does
+
+At the repo root:
+
+```bash
+npm run dev:full
+```
+
+expands to:
+
+```bash
+npm run db:start && npm run dev
+```
+
+That means:
+
+- `npm run db:start` runs `bash scripts/db-start.sh` and starts the PostgreSQL Docker container
+- `npm run dev` runs `node scripts/dev.mjs`
+- `scripts/dev.mjs` starts both dev servers in parallel:
+  - backend in `backend/`
+  - frontend in `frontend/`
+
+If your database is already running, `npm run dev` is enough.
 
 ## Deploying For Public Share Links
 

@@ -7,6 +7,70 @@ import DatePicker from './DatePicker';
 import StatusPill from './StatusPill';
 import type { ListColumnConfig } from './listColumns';
 
+function parseProgressInput(value: unknown) {
+  if (typeof value === 'number' && !Number.isNaN(value)) {
+    return Math.max(0, Math.min(100, value));
+  }
+
+  if (typeof value === 'string') {
+    const normalized = value.trim().replace(/%$/, '');
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    if (!Number.isNaN(parsed)) {
+      return Math.max(0, Math.min(100, parsed));
+    }
+  }
+
+  return null;
+}
+
+const ProgressEditor: React.FC<{
+  value: string;
+  onValueChange: (value: string) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+  inputRef?: React.RefObject<HTMLInputElement>;
+}> = ({ value, onValueChange, onCommit, onCancel, inputRef }) => {
+  const numericValue = parseProgressInput(value) ?? 0;
+
+  return (
+    <div
+      className="flex items-center gap-2"
+      onClick={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+    >
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={numericValue}
+        onChange={(event) => onValueChange(event.target.value)}
+        onPointerUp={() => onCommit()}
+        className="min-w-0 flex-1 accent-blue-600"
+      />
+      <div className="relative w-16 shrink-0">
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={(event) => onValueChange(event.target.value)}
+          onBlur={onCommit}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') onCommit();
+            if (event.key === 'Escape') onCancel();
+          }}
+          className="w-full rounded border border-blue-300 px-2 py-1 pr-5 text-xs outline-none focus:border-blue-500"
+          placeholder="0"
+          autoFocus
+        />
+        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">
+          %
+        </span>
+      </div>
+    </div>
+  );
+};
+
 interface TaskRowProps {
   task: Task;
   depth: number;
@@ -50,17 +114,20 @@ const TaskRow: React.FC<TaskRowProps> = ({
   const [typeValue, setTypeValue] = React.useState(task.task_type || '');
   const [editingOnboardingText, setEditingOnboardingText] = React.useState(false);
   const [editingOnboardingProgress, setEditingOnboardingProgress] = React.useState(false);
+  const [editingCustomProgressFieldId, setEditingCustomProgressFieldId] = React.useState<string | null>(null);
+  const [customProgressValue, setCustomProgressValue] = React.useState('');
   const [onboardingTextValue, setOnboardingTextValue] = React.useState(
     typeof task.custom_fields?.onboarding_completion_text === 'string' ? task.custom_fields.onboarding_completion_text : ''
   );
-  const [onboardingProgressValue, setOnboardingProgressValue] = React.useState(
-    typeof task.custom_fields?.onboarding_completion_progress === 'number'
-      ? String(task.custom_fields.onboarding_completion_progress)
-      : ''
-  );
+  const [onboardingProgressValue, setOnboardingProgressValue] = React.useState(() => {
+    const currentValue = parseProgressInput(task.custom_fields?.onboarding_completion_progress);
+    return currentValue === null ? '' : String(currentValue);
+  });
   const [hovered, setHovered] = React.useState(false);
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const onboardingInputRef = React.useRef<HTMLInputElement>(null);
+  const onboardingProgressInputRef = React.useRef<HTMLInputElement>(null);
+  const customProgressInputRef = React.useRef<HTMLInputElement>(null);
 
   const isExpanded = expandedIds.has(task.id);
   const hasChildren = task.children.length > 0;
@@ -92,11 +159,8 @@ const TaskRow: React.FC<TaskRowProps> = ({
     setOnboardingTextValue(
       typeof task.custom_fields?.onboarding_completion_text === 'string' ? task.custom_fields.onboarding_completion_text : ''
     );
-    setOnboardingProgressValue(
-      typeof task.custom_fields?.onboarding_completion_progress === 'number'
-        ? String(task.custom_fields.onboarding_completion_progress)
-        : ''
-    );
+    const currentProgress = parseProgressInput(task.custom_fields?.onboarding_completion_progress);
+    setOnboardingProgressValue(currentProgress === null ? '' : String(currentProgress));
   }, [task.custom_fields]);
 
   const saveOnboardingText = () => {
@@ -116,13 +180,10 @@ const TaskRow: React.FC<TaskRowProps> = ({
 
   const saveOnboardingProgress = () => {
     const trimmedValue = onboardingProgressValue.trim();
-    const parsedValue = trimmedValue ? Number(trimmedValue) : null;
-    if (trimmedValue && (parsedValue === null || Number.isNaN(parsedValue))) {
-      setOnboardingProgressValue(
-        typeof task.custom_fields?.onboarding_completion_progress === 'number'
-          ? String(task.custom_fields.onboarding_completion_progress)
-          : ''
-      );
+    const parsedValue = trimmedValue ? parseProgressInput(trimmedValue) : null;
+    if (trimmedValue && parsedValue === null) {
+      const fallbackProgress = parseProgressInput(task.custom_fields?.onboarding_completion_progress);
+      setOnboardingProgressValue(fallbackProgress === null ? '' : String(fallbackProgress));
       setEditingOnboardingProgress(false);
       return;
     }
@@ -131,7 +192,7 @@ const TaskRow: React.FC<TaskRowProps> = ({
     if (parsedValue === null) {
       delete nextCustomFields.onboarding_completion_progress;
     } else {
-      nextCustomFields.onboarding_completion_progress = Math.max(0, Math.min(100, parsedValue));
+      nextCustomFields.onboarding_completion_progress = parsedValue;
     }
 
     onUpdate(task.id, {
@@ -139,6 +200,34 @@ const TaskRow: React.FC<TaskRowProps> = ({
       custom_fields: nextCustomFields,
     });
     setEditingOnboardingProgress(false);
+  };
+
+
+  const startCustomProgressEditing = (fieldId: string, value: CustomFieldValue) => {
+    const parsedValue = parseProgressInput(value);
+    setEditingCustomProgressFieldId(fieldId);
+    setCustomProgressValue(parsedValue === null ? '' : String(parsedValue));
+    setTimeout(() => customProgressInputRef.current?.select(), 10);
+  };
+
+  const saveCustomProgress = (fieldId: string, previousValue: CustomFieldValue) => {
+    const trimmedValue = customProgressValue.trim();
+    if (!trimmedValue) {
+      updateCustomFieldValue(fieldId, null);
+      setEditingCustomProgressFieldId(null);
+      return;
+    }
+
+    const parsedValue = parseProgressInput(trimmedValue);
+    if (parsedValue === null) {
+      const fallbackValue = parseProgressInput(previousValue);
+      setCustomProgressValue(fallbackValue === null ? '' : String(fallbackValue));
+      setEditingCustomProgressFieldId(null);
+      return;
+    }
+
+    updateCustomFieldValue(fieldId, parsedValue);
+    setEditingCustomProgressFieldId(null);
   };
 
   const visibleColumns = columns.filter((column) => column.visible);
@@ -162,17 +251,19 @@ const TaskRow: React.FC<TaskRowProps> = ({
   };
 
   const renderProgressValue = (value: number | null) => {
-    if (typeof value !== 'number' || Number.isNaN(value)) {
-      return <span className="text-gray-300">-</span>;
-    }
-
-    const progress = Math.max(0, Math.min(100, value));
+    const hasValue = typeof value === 'number' && !Number.isNaN(value);
+    const progress = hasValue ? Math.max(0, Math.min(100, value)) : 0;
     return (
-      <span className="flex items-center gap-2">
-        <span className="h-2 flex-1 overflow-hidden rounded-full bg-gray-200">
-          <span className="block h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
+      <span className="flex min-w-0 items-center gap-2">
+        <span className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-gray-200">
+          <span
+            className={`block h-full rounded-full transition-[width] ${hasValue ? 'bg-blue-500' : 'bg-gray-300'}`}
+            style={{ width: `${progress}%` }}
+          />
         </span>
-        <span className="text-[11px] font-medium text-gray-500">{progress}%</span>
+        <span className={`shrink-0 text-[11px] font-medium ${hasValue ? 'text-gray-500' : 'text-gray-400'}`}>
+          {hasValue ? `${progress}%` : 'Set'}
+        </span>
       </span>
     );
   };
@@ -190,8 +281,8 @@ const TaskRow: React.FC<TaskRowProps> = ({
       );
     }
 
-    if (columnFieldType === 'progress' && typeof value === 'number') {
-      return renderProgressValue(value);
+    if (columnFieldType === 'progress') {
+      return renderProgressValue(parseProgressInput(value));
     }
 
     if (columnFieldType === 'url' && typeof value === 'string' && value.trim()) {
@@ -416,39 +507,30 @@ const TaskRow: React.FC<TaskRowProps> = ({
               return (
                 <td key={column.id} className="px-3 py-1.5">
                   {editingOnboardingProgress ? (
-                    <input
+                    <ProgressEditor
+                      inputRef={onboardingProgressInputRef}
                       value={onboardingProgressValue}
-                      onChange={(e) => setOnboardingProgressValue(e.target.value)}
-                      onBlur={saveOnboardingProgress}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') saveOnboardingProgress();
-                        if (e.key === 'Escape') {
-                          setOnboardingProgressValue(
-                            typeof task.custom_fields?.onboarding_completion_progress === 'number'
-                              ? String(task.custom_fields.onboarding_completion_progress)
-                              : ''
-                          );
-                          setEditingOnboardingProgress(false);
-                        }
+                      onValueChange={setOnboardingProgressValue}
+                      onCommit={saveOnboardingProgress}
+                      onCancel={() => {
+                        const fallbackValue = parseProgressInput(task.custom_fields?.onboarding_completion_progress);
+                        setOnboardingProgressValue(fallbackValue === null ? '' : String(fallbackValue));
+                        setEditingOnboardingProgress(false);
                       }}
-                      className="w-full rounded border border-blue-300 px-2 py-1 text-xs outline-none focus:border-blue-500"
-                      placeholder="0-100"
-                      autoFocus
                     />
                   ) : (
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
+                        const currentValue = parseProgressInput(task.custom_fields?.onboarding_completion_progress);
+                        setOnboardingProgressValue(currentValue === null ? '' : String(currentValue));
                         setEditingOnboardingProgress(true);
+                        setTimeout(() => onboardingProgressInputRef.current?.select(), 10);
                       }}
                       className="w-full text-left text-xs text-gray-600 transition-colors hover:text-blue-600"
                     >
-                      {renderProgressValue(
-                        typeof task.custom_fields?.onboarding_completion_progress === 'number'
-                          ? task.custom_fields.onboarding_completion_progress
-                          : null
-                      )}
+                      {renderProgressValue(parseProgressInput(task.custom_fields?.onboarding_completion_progress))}
                     </button>
                   )}
                 </td>
@@ -606,6 +688,40 @@ const TaskRow: React.FC<TaskRowProps> = ({
                   />
                   {value === true ? 'Enabled' : 'Off'}
                 </label>
+              </td>
+            );
+          }
+
+          if (column.field?.type === 'progress') {
+            const progressValue = parseProgressInput(value);
+            const isEditingProgress = editingCustomProgressFieldId === column.field.id;
+
+            return (
+              <td key={column.id} className="px-3 py-1.5">
+                {isEditingProgress ? (
+                  <ProgressEditor
+                    inputRef={customProgressInputRef}
+                    value={customProgressValue}
+                    onValueChange={setCustomProgressValue}
+                    onCommit={() => saveCustomProgress(column.field!.id, value)}
+                    onCancel={() => {
+                      const fallbackValue = parseProgressInput(value);
+                      setCustomProgressValue(fallbackValue === null ? '' : String(fallbackValue));
+                      setEditingCustomProgressFieldId(null);
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startCustomProgressEditing(column.field!.id, value);
+                    }}
+                    className="w-full text-left text-xs text-gray-600 transition-colors hover:text-blue-600"
+                  >
+                    {renderProgressValue(progressValue)}
+                  </button>
+                )}
               </td>
             );
           }

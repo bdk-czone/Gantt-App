@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowDown, ArrowUp, Bell, BellOff, Columns, Edit2, GitBranch, GripVertical, Plus, RefreshCw, Settings2, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Bell, BellOff, Columns, Edit2, GitBranch, GripVertical, Plus, RefreshCw, Settings2, Trash2, Type } from 'lucide-react';
 import type { List as ProjectList, SavedView, SelectedListTarget, StatusOption, Task, TaskDependency, TaskFocusMode, Workspace } from '../types';
 import { createTask, deleteList, deleteTask, getList, getTaskTree, getWorkspaces, updateList, updateTask } from '../api';
 import { EntityIcon, getAppearanceColor } from '../lib/appearance';
@@ -16,6 +16,7 @@ import {
   resolveProjectSchedule,
 } from '../lib/projectSettings';
 import ContextMenu from './ContextMenu';
+import type { ContextMenuAction } from './ContextMenu';
 import type { ListColumnConfig } from './listColumns';
 import PlannerToolbar from './PlannerToolbar';
 import ProjectEditModal from './ProjectEditModal';
@@ -760,6 +761,21 @@ const ListView: React.FC<ListViewProps> = ({
     });
   };
 
+
+  const moveColumnToEdge = (columnId: string, edge: 'start' | 'end') => {
+    setActiveSavedViewId('');
+    setActiveColumnOrder((current) => {
+      const resolved = current.length > 0 ? [...current] : columns.map((column) => column.id);
+      const next = resolved.filter((id) => id !== columnId);
+      if (edge === 'start') {
+        next.unshift(columnId);
+      } else {
+        next.push(columnId);
+      }
+      return next;
+    });
+  };
+
   const toggleColumnVisibility = (columnId: string, visible: boolean) => {
     setActiveSavedViewId('');
     const column = columns.find((item) => item.id === columnId);
@@ -965,13 +981,13 @@ const ListView: React.FC<ListViewProps> = ({
     }));
   };
 
-  const changeCustomFieldType = async (columnId: string) => {
+  const changeCustomFieldType = async (columnId: string, explicitType?: string) => {
     if (!editableListTarget) return;
     const column = columns.find((item) => item.id === columnId);
     if (!column || column.kind !== 'custom' || !column.field) return;
 
     const currentType = column.field.type;
-    const nextType = window.prompt(
+    const nextType = explicitType ?? window.prompt(
       `Field type (${CUSTOM_FIELD_TYPE_OPTIONS.map((option) => option.value).join(', ')})`,
       currentType
     );
@@ -985,6 +1001,19 @@ const ListView: React.FC<ListViewProps> = ({
       customFields: settings.customFields.map((field) =>
         field.id === column.field!.id ? { ...field, type: normalizedType as typeof field.type } : field
       ),
+    }));
+  };
+
+  const setBuiltInColumnType = async (columnId: string, nextType: string) => {
+    const column = columns.find((item) => item.id === columnId);
+    if (!column || column.kind !== 'builtin' || !column.key) return;
+
+    await updateProjectSettings((settings) => ({
+      ...settings,
+      builtInColumnTypes: {
+        ...settings.builtInColumnTypes,
+        [column.key!]: nextType as any,
+      },
     }));
   };
 
@@ -1008,6 +1037,142 @@ const ListView: React.FC<ListViewProps> = ({
     if (!nextLabel) return;
     await renameColumn(columnId, nextLabel);
   };
+
+  const activeSavedViewName = React.useMemo(
+    () => activeProjectSettings.savedViews.find((view) => view.id === activeSavedViewId)?.name ?? '',
+    [activeProjectSettings.savedViews, activeSavedViewId]
+  );
+
+  const headerContextColumn = headerContextMenu
+    ? columns.find((column) => column.id === headerContextMenu.columnId) ?? null
+    : null;
+
+  const headerContextActions = React.useMemo<ContextMenuAction[]>(() => {
+    if (!headerContextMenu || !headerContextColumn) return [];
+
+    const actions: ContextMenuAction[] = [
+      {
+        label: headerContextColumn.kind === 'custom' ? 'Edit field' : 'Rename column',
+        icon: <Edit2 size={13} />,
+        onClick: () => startHeaderEditing(headerContextMenu.columnId),
+      },
+      {
+        label: 'Move to start',
+        icon: <ArrowUp size={13} />,
+        onClick: () => moveColumnToEdge(headerContextMenu.columnId, 'start'),
+      },
+      {
+        label: 'Move to end',
+        icon: <ArrowDown size={13} />,
+        onClick: () => moveColumnToEdge(headerContextMenu.columnId, 'end'),
+      },
+      {
+        label: 'Hide column',
+        icon: <Columns size={13} />,
+        onClick: () => toggleColumnVisibility(headerContextMenu.columnId, false),
+      },
+    ];
+
+    if (headerContextColumn.kind === 'builtin') {
+      if (headerContextColumn.key === 'onboarding_completion') {
+        actions.push(
+          {
+            label: 'Use as text',
+            icon: <Type size={13} />,
+            onClick: () => void setBuiltInColumnType(headerContextMenu.columnId, 'text'),
+            divider: true,
+          },
+          {
+            label: 'Use as date',
+            icon: <Columns size={13} />,
+            onClick: () => void setBuiltInColumnType(headerContextMenu.columnId, 'date'),
+          },
+          {
+            label: 'Use as progress bar',
+            icon: <Columns size={13} />,
+            onClick: () => void setBuiltInColumnType(headerContextMenu.columnId, 'progress'),
+          }
+        );
+      }
+
+      actions.push({
+        label: 'Reset label',
+        icon: <RefreshCw size={13} />,
+        onClick: () => void resetColumnLabel(headerContextMenu.columnId),
+        divider: headerContextColumn.key !== 'onboarding_completion',
+      });
+    }
+
+    if (headerContextColumn.kind === 'custom') {
+      actions.push(
+        {
+          label: 'Use as text field',
+          icon: <Type size={13} />,
+          onClick: () => void changeCustomFieldType(headerContextMenu.columnId, 'text'),
+          divider: true,
+        },
+        {
+          label: 'Use as number field',
+          icon: <Type size={13} />,
+          onClick: () => void changeCustomFieldType(headerContextMenu.columnId, 'number'),
+        },
+        {
+          label: 'Use as date field',
+          icon: <Columns size={13} />,
+          onClick: () => void changeCustomFieldType(headerContextMenu.columnId, 'date'),
+        },
+        {
+          label: 'Use as progress bar',
+          icon: <Columns size={13} />,
+          onClick: () => void changeCustomFieldType(headerContextMenu.columnId, 'progress'),
+        },
+        {
+          label: 'More field types...',
+          icon: <Settings2 size={13} />,
+          onClick: () => void changeCustomFieldType(headerContextMenu.columnId),
+        }
+      );
+    }
+
+    actions.push({
+      label: 'Open Customize',
+      icon: <Settings2 size={13} />,
+      onClick: () => setViewSettingsOpen(true),
+      divider: true,
+    });
+
+    return actions;
+  }, [changeCustomFieldType, columns, headerContextColumn, headerContextMenu, moveColumnToEdge, resetColumnLabel, setViewSettingsOpen, setBuiltInColumnType, toggleColumnVisibility]);
+
+  const listCustomizeOverview = (
+    <section className="space-y-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">List options</p>
+      <div className="rounded-[1.4rem] border border-slate-200 bg-white p-1.5 shadow-sm">
+        <button
+          type="button"
+          onClick={onToggleDefaultTaskTreeExpanded}
+          className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-slate-50"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-slate-900">Tasks open by default</p>
+            <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Start project task trees expanded whenever you open the planner.</p>
+          </div>
+          <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${defaultTaskTreeExpanded ? 'bg-blue-600' : 'bg-slate-200'}`}>
+            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${defaultTaskTreeExpanded ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+          </span>
+        </button>
+        <div className="flex items-center justify-between gap-3 rounded-xl px-3 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-medium text-slate-900">Visible fields</p>
+            <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Use Fields below to show, hide, and reorder the columns you rely on every day.</p>
+          </div>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+            {columns.filter((column) => column.visible).length} shown
+          </span>
+        </div>
+      </div>
+    </section>
+  );
 
   if (loading) {
     return (
@@ -1042,6 +1207,10 @@ const ListView: React.FC<ListViewProps> = ({
             : `${visibleTaskCount} of ${totalTaskCount} tasks match the current filters`
         }
         searchQuery={searchQuery}
+        onSearchQueryChange={(value) => {
+          setActiveSavedViewId('');
+          setSearchQuery(value);
+        }}
         statusOptions={availableStatuses}
         selectedStatuses={selectedStatuses}
         hideCompleted={hideCompleted}
@@ -1079,6 +1248,7 @@ const ListView: React.FC<ListViewProps> = ({
         }
         savedViews={singleSelectedList ? activeProjectSettings.savedViews : []}
         activeSavedViewId={activeSavedViewId}
+        activeSavedViewName={singleSelectedList ? activeSavedViewName || undefined : undefined}
         onSavedViewSelect={singleSelectedList ? handleSavedViewSelect : undefined}
         onSaveCurrentView={singleSelectedList ? handleSaveCurrentView : undefined}
         viewMode={viewMode}
@@ -1325,37 +1495,7 @@ const ListView: React.FC<ListViewProps> = ({
         <ContextMenu
           x={headerContextMenu.x}
           y={headerContextMenu.y}
-          actions={[
-            {
-              label: 'Rename column',
-              icon: <Edit2 size={13} />,
-              onClick: () => startHeaderEditing(headerContextMenu.columnId),
-            },
-            ...(columns.find((column) => column.id === headerContextMenu.columnId)?.kind === 'builtin'
-              ? [
-                  {
-                    label: 'Reset label',
-                    icon: <RefreshCw size={13} />,
-                    onClick: () => void resetColumnLabel(headerContextMenu.columnId),
-                  },
-                ]
-              : []),
-            ...(columns.find((column) => column.id === headerContextMenu.columnId)?.kind === 'custom'
-              ? [
-                  {
-                    label: 'Change field type',
-                    icon: <Columns size={13} />,
-                    onClick: () => void changeCustomFieldType(headerContextMenu.columnId),
-                  },
-                ]
-              : []),
-            {
-              label: 'Open View Builder',
-              icon: <Settings2 size={13} />,
-              onClick: () => setViewSettingsOpen(true),
-              divider: true,
-            },
-          ]}
+          actions={headerContextActions}
           onClose={() => setHeaderContextMenu(null)}
         />
       )}
@@ -1402,6 +1542,9 @@ const ListView: React.FC<ListViewProps> = ({
           }}
           onClose={() => setViewSettingsOpen(false)}
           onSaved={loadTasks}
+          viewType="list"
+          currentViewName={activeSavedViewName || 'Working view'}
+          overviewContent={listCustomizeOverview}
         />
       )}
 

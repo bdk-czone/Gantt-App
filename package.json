@@ -13,7 +13,7 @@
     "db:stop": "bash scripts/db-stop.sh",
     "setup:db": "npm --prefix backend exec ts-node src/runSqlFile.ts src/schema.sql",
     "seed:db": "npm --prefix backend exec ts-node src/runSqlFile.ts src/seed.sql",
-    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend install"
   },
   "private": true
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, Bell, BellOff, CalendarDays, ChevronDown, ChevronRight, Download, Edit2, FileText, GitBranch, GripVertical, Plus, RefreshCw, Route, Trash2, Type, X } from 'lucide-react';
+import { AlertTriangle, Bell, BellOff, CalendarDays, ChevronDown, ChevronRight, Download, Edit2, FileText, GitBranch, GripVertical, Plus, RefreshCw, Trash2, Type, X } from 'lucide-react';
 import {
   addDays,
   addMonths,
@@ -42,6 +42,7 @@ const DEFAULT_GANTT_ZOOM_SCALE = 100;
 const GANTT_LABEL_WIDTH_KEY = 'projectflux:gantt-label-width:v1';
 const GANTT_PLANNER_HEIGHT_KEY = 'projectflux:gantt-planner-height:v1';
 const MAX_PLANNER_PANEL_HEIGHT = 280;
+const MIN_PLANNER_PANEL_HEIGHT = 96;
 const LAST_GANTT_VIEW_PREFIX = 'myproplanner:last-gantt-view:v1:';
 
 interface GanttViewProps {
@@ -117,7 +118,7 @@ type CriticalPathDetails = {
   slackByTaskId: Map<string, number>;
   sectionFinishDate: string | null;
 };
-type HoverToolbarMenuId = 'timeline' | 'highlights' | 'display' | null;
+type HoverToolbarMenuId = 'display' | null;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEPENDENCY_TYPE_LABELS: Record<string, string> = {
@@ -711,14 +712,7 @@ const GanttView: React.FC<GanttViewProps> = ({
       return 320;
     }
   });
-  const [plannerPanelHeight, setPlannerPanelHeight] = React.useState<number | null>(() => {
-    try {
-      const raw = localStorage.getItem(GANTT_PLANNER_HEIGHT_KEY);
-      return raw ? Math.max(120, Number(raw)) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [plannerPanelHeight, setPlannerPanelHeight] = React.useState<number | null>(null);
   const [ganttFontSize, setGanttFontSize] = React.useState(DEFAULT_GANTT_FONT_SIZE);
   const [zoomScale, setZoomScale] = React.useState(DEFAULT_GANTT_ZOOM_SCALE);
   const [hoverToolbarMenu, setHoverToolbarMenu] = React.useState<HoverToolbarMenuId>(null);
@@ -1881,7 +1875,7 @@ const GanttView: React.FC<GanttViewProps> = ({
   const startPlannerResize = (startY: number, startHeight: number) => {
     const onMouseMove = (event: MouseEvent) => {
       const delta = event.clientY - startY;
-      setPlannerPanelHeight(Math.max(120, Math.min(MAX_PLANNER_PANEL_HEIGHT, startHeight + delta)));
+      setPlannerPanelHeight(Math.max(MIN_PLANNER_PANEL_HEIGHT, Math.min(MAX_PLANNER_PANEL_HEIGHT, startHeight + delta)));
     };
 
     const onMouseUp = () => {
@@ -2391,6 +2385,141 @@ const GanttView: React.FC<GanttViewProps> = ({
     syncTimelineHeaderPosition();
   }, [syncTimelineHeaderPosition, timelineStart, timelineEnd, totalWidth, zoom]);
 
+  const activeSavedViewName = React.useMemo(
+    () => activeProjectSettings.savedViews.find((view) => view.id === activeSavedViewId)?.name ?? '',
+    [activeProjectSettings.savedViews, activeSavedViewId]
+  );
+
+  const ganttCustomizeOverview = (
+    <>
+      <section className="space-y-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Timeline controls</p>
+        <div className="rounded-[1.4rem] border border-slate-200 bg-white p-1.5 shadow-sm">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSavedViewId('');
+              setShowDependencies((current) => !current);
+            }}
+            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-slate-50"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-slate-900">Show dependencies</p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Draw dependency lines directly on the timeline.</p>
+            </div>
+            <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${showDependencies ? 'bg-blue-600' : 'bg-slate-200'}`}>
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${showDependencies ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSavedViewId('');
+              setAutoShiftDependencies((current) => !current);
+            }}
+            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-slate-50"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-slate-900">Auto-shift linked tasks</p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Move downstream tasks automatically when dependencies change.</p>
+            </div>
+            <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${autoShiftDependencies ? 'bg-blue-600' : 'bg-slate-200'}`}>
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${autoShiftDependencies ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSavedViewId('');
+              setCriticalOnly((current) => !current);
+            }}
+            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-slate-50"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-slate-900">Critical path only</p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Reduce noise and focus the timeline on critical work.</p>
+            </div>
+            <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${criticalOnly ? 'bg-blue-600' : 'bg-slate-200'}`}>
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${criticalOnly ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={onToggleDefaultTaskTreeExpanded}
+            className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-3 text-left transition-colors hover:bg-slate-50"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-[13px] font-medium text-slate-900">Tasks open by default</p>
+              <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Start the planner with project task trees already expanded.</p>
+            </div>
+            <span className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${defaultTaskTreeExpanded ? 'bg-blue-600' : 'bg-slate-200'}`}>
+              <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-transform ${defaultTaskTreeExpanded ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
+            </span>
+          </button>
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Display</p>
+        <div className="rounded-[1.4rem] border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="space-y-4">
+            <label className="block">
+              <div className="mb-2 flex items-center justify-between gap-3 text-[13px] font-medium text-slate-900">
+                <span>Label column width</span>
+                <span className="text-xs font-semibold text-slate-500">{labelWidth}px</span>
+              </div>
+              <input
+                type="range"
+                min={180}
+                max={520}
+                value={labelWidth}
+                onChange={(event) => {
+                  setActiveSavedViewId('');
+                  setLabelWidth(Number(event.target.value));
+                }}
+                className="w-full accent-blue-600"
+              />
+            </label>
+            <label className="block">
+              <div className="mb-2 flex items-center justify-between gap-3 text-[13px] font-medium text-slate-900">
+                <span>Text size</span>
+                <span className="text-xs font-semibold text-slate-500">{ganttFontSize}px</span>
+              </div>
+              <input
+                type="range"
+                min={9}
+                max={20}
+                value={ganttFontSize}
+                onChange={(event) => {
+                  setActiveSavedViewId('');
+                  setGanttFontSize(Number(event.target.value));
+                }}
+                className="w-full accent-blue-600"
+              />
+            </label>
+            <label className="block">
+              <div className="mb-2 flex items-center justify-between gap-3 text-[13px] font-medium text-slate-900">
+                <span>Timeline density</span>
+                <span className="text-xs font-semibold text-slate-500">{zoomScale}%</span>
+              </div>
+              <input
+                type="range"
+                min={40}
+                max={300}
+                value={zoomScale}
+                onChange={(event) => {
+                  setActiveSavedViewId('');
+                  setZoomScale(Number(event.target.value));
+                }}
+                className="w-full accent-blue-600"
+              />
+            </label>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+
   if (loading) {
     return (
       <div className="flex h-48 items-center justify-center">
@@ -2429,6 +2558,10 @@ const GanttView: React.FC<GanttViewProps> = ({
               : `${visibleTaskCount} of ${totalTaskCount} tasks match the current filters${criticalOnly ? ' · critical only' : ''}${dependencyInsights.totalConflicts > 0 ? ` · ${dependencyInsights.totalConflicts} dependency conflict${dependencyInsights.totalConflicts === 1 ? '' : 's'}` : ''}`
           }
           searchQuery={searchQuery}
+          onSearchQueryChange={(value) => {
+            setActiveSavedViewId('');
+            setSearchQuery(value);
+          }}
           statusOptions={availableStatuses}
           selectedStatuses={selectedStatuses}
           hideCompleted={hideCompleted}
@@ -2465,6 +2598,7 @@ const GanttView: React.FC<GanttViewProps> = ({
           }
           savedViews={singleSelectedList ? activeProjectSettings.savedViews : []}
           activeSavedViewId={activeSavedViewId}
+          activeSavedViewName={singleSelectedList ? activeSavedViewName || undefined : undefined}
           onSavedViewSelect={singleSelectedList ? handleSavedViewSelect : undefined}
           onSaveCurrentView={singleSelectedList ? handleSaveCurrentView : undefined}
           viewMode={viewMode}
@@ -2488,226 +2622,193 @@ const GanttView: React.FC<GanttViewProps> = ({
           fillHeight={Boolean(plannerPanelHeight)}
           extraActions={
             <>
-                <div
-                  className="relative"
-                  onMouseEnter={() => openHoverToolbarMenu('timeline')}
-                  onMouseLeave={() => scheduleHoverToolbarMenuClose('timeline')}
+              <div
+                className="relative"
+                onMouseEnter={() => openHoverToolbarMenu('display')}
+                onMouseLeave={() => scheduleHoverToolbarMenuClose('display')}
+              >
+                <button
+                  type="button"
+                  onClick={() => openHoverToolbarMenu('display')}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm transition-colors ${
+                    hoverToolbarMenu === 'display'
+                      ? 'border-blue-200 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
                 >
-                  <button
-                    type="button"
-                    onClick={() => openHoverToolbarMenu('timeline')}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm transition-colors ${
-                      hoverToolbarMenu === 'timeline'
-                        ? 'border-blue-200 bg-blue-50 text-blue-700'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <GitBranch size={14} />
-                    Timeline
-                  </button>
-                  {hoverToolbarMenu === 'timeline' && (
-                    <div className="absolute left-0 top-full z-50 mt-2 max-h-[68vh] w-48 overflow-y-auto rounded-[1rem] border border-slate-200 bg-white p-2 shadow-2xl">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveSavedViewId('');
-                          setShowDependencies((current) => !current);
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-xs transition-colors ${showDependencies ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
-                      >
-                        <span>Show dependencies</span>
-                        <span>{showDependencies ? 'On' : 'Off'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveSavedViewId('');
-                          setAutoShiftDependencies((current) => !current);
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-xs transition-colors ${autoShiftDependencies ? 'bg-violet-50 text-violet-700' : 'text-slate-700 hover:bg-slate-50'}`}
-                      >
-                        <span>Auto-shift linked tasks</span>
-                        <span>{autoShiftDependencies ? 'On' : 'Off'}</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  <Type size={14} />
+                  Display
+                </button>
+                {hoverToolbarMenu === 'display' && (
+                  <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-[1rem] border border-slate-200 bg-white p-3 shadow-2xl">
+                    <div className="space-y-3">
+                      <div className="rounded-[1rem] border border-slate-200 bg-slate-50/70 p-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveSavedViewId('');
+                            setShowDependencies((current) => !current);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${showDependencies ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                        >
+                          <span>Show dependencies</span>
+                          <span>{showDependencies ? 'On' : 'Off'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveSavedViewId('');
+                            setAutoShiftDependencies((current) => !current);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${autoShiftDependencies ? 'bg-violet-50 text-violet-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                        >
+                          <span>Auto-shift linked tasks</span>
+                          <span>{autoShiftDependencies ? 'On' : 'Off'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveSavedViewId('');
+                            setCriticalOnly((current) => !current);
+                          }}
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${criticalOnly ? 'bg-rose-50 text-rose-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                        >
+                          <span>Critical only</span>
+                          <span>{criticalOnly ? 'On' : 'Off'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onToggleDefaultTaskTreeExpanded}
+                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${defaultTaskTreeExpanded ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                        >
+                          <span>Tasks open by default</span>
+                          <span>{defaultTaskTreeExpanded ? 'On' : 'Off'}</span>
+                        </button>
+                      </div>
 
-                <div
-                  className="relative"
-                  onMouseEnter={() => openHoverToolbarMenu('highlights')}
-                  onMouseLeave={() => scheduleHoverToolbarMenuClose('highlights')}
-                >
-                  <button
-                    type="button"
-                    onClick={() => openHoverToolbarMenu('highlights')}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm transition-colors ${
-                      hoverToolbarMenu === 'highlights'
-                        ? 'border-blue-200 bg-blue-50 text-blue-700'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Route size={14} />
-                    Highlights
-                  </button>
-                  {hoverToolbarMenu === 'highlights' && (
-                    <div className="absolute left-0 top-full z-50 mt-2 max-h-[68vh] w-48 overflow-y-auto rounded-[1rem] border border-slate-200 bg-white p-2 shadow-2xl">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveSavedViewId('');
-                          setCriticalOnly((current) => !current);
-                        }}
-                        className={`flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-xs transition-colors ${criticalOnly ? 'bg-rose-50 text-rose-700' : 'text-slate-700 hover:bg-slate-50'}`}
-                      >
-                        <span>Critical only</span>
-                        <span>{criticalOnly ? 'On' : 'Off'}</span>
-                      </button>
+                      <div>
+                        <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+                          <span>Font size</span>
+                          <span>{ganttFontSize}px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={9}
+                          max={20}
+                          step={1}
+                          value={ganttFontSize}
+                          onChange={(event) => {
+                            setActiveSavedViewId('');
+                            setGanttFontSize(Number(event.target.value));
+                          }}
+                          className="w-full accent-blue-600"
+                        />
+                      </div>
+                      <div>
+                        <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+                          <span>Zoom scale</span>
+                          <span>{zoomScale}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={40}
+                          max={300}
+                          step={10}
+                          value={zoomScale}
+                          onChange={(event) => {
+                            setActiveSavedViewId('');
+                            setZoomScale(Number(event.target.value));
+                          }}
+                          className="w-full accent-blue-600"
+                        />
+                      </div>
+
                       {singleSelectedList && (
                         <button
                           type="button"
                           onClick={() => scrollToProjectStart()}
-                          className="flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-xs text-slate-700 transition-colors hover:bg-slate-50"
+                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50"
                         >
-                          <span>Jump to project start</span>
-                          <span>Go</span>
+                          Jump to project start
                         </button>
                       )}
                       {singleSelectedList && (
                         <button
                           type="button"
                           onClick={() => void handleSetBaseline()}
-                          className="flex w-full items-center justify-between rounded-xl px-2 py-1.5 text-left text-xs text-slate-700 transition-colors hover:bg-slate-50"
-                        >
-                          <span>Set baseline from current plan</span>
-                          <span>Run</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  className="relative"
-                  onMouseEnter={() => openHoverToolbarMenu('display')}
-                  onMouseLeave={() => scheduleHoverToolbarMenuClose('display')}
-                >
-                  <button
-                    type="button"
-                    onClick={() => openHoverToolbarMenu('display')}
-                    className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm transition-colors ${
-                      hoverToolbarMenu === 'display'
-                        ? 'border-blue-200 bg-blue-50 text-blue-700'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <Type size={14} />
-                    Display
-                  </button>
-                  {hoverToolbarMenu === 'display' && (
-                    <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-[1rem] border border-slate-200 bg-white p-3 shadow-2xl">
-                      <div className="space-y-3">
-                        <div>
-                          <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-                            <span>Font size</span>
-                            <span>{ganttFontSize}px</span>
-                          </div>
-                          <input
-                            type="range"
-                            min={9}
-                            max={20}
-                            step={1}
-                            value={ganttFontSize}
-                            onChange={(event) => {
-                              setActiveSavedViewId('');
-                              setGanttFontSize(Number(event.target.value));
-                            }}
-                            className="w-full accent-blue-600"
-                          />
-                        </div>
-                        <div>
-                          <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-                            <span>Zoom scale</span>
-                            <span>{zoomScale}%</span>
-                          </div>
-                          <input
-                            type="range"
-                            min={40}
-                            max={300}
-                            step={10}
-                            value={zoomScale}
-                            onChange={(event) => {
-                              setActiveSavedViewId('');
-                              setZoomScale(Number(event.target.value));
-                            }}
-                            className="w-full accent-blue-600"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveSavedViewId('');
-                            setGanttFontSize(DEFAULT_GANTT_FONT_SIZE);
-                            setZoomScale(DEFAULT_GANTT_ZOOM_SCALE);
-                            setPlannerPanelHeight(null);
-                          }}
                           className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50"
                         >
-                          Reset display
+                          Set baseline from current plan
                         </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {dependencyInsights.totalConflicts > 0 && (
-                  <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
-                    {dependencyInsights.totalConflicts} conflict{dependencyInsights.totalConflicts === 1 ? '' : 's'}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setReportsOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
-                >
-                  <FileText size={14} />
-                  Reports
-                </button>
-                <div className="flex items-center whitespace-nowrap">
-                  <div className="flex items-center gap-1 rounded-full bg-slate-100 p-1">
-                    {(['days', 'weeks', 'months'] as ZoomLevel[]).map((level) => (
+                      )}
                       <button
-                        key={level}
+                        type="button"
                         onClick={() => {
                           setActiveSavedViewId('');
-                          setZoom(level);
+                          setGanttFontSize(DEFAULT_GANTT_FONT_SIZE);
+                          setZoomScale(DEFAULT_GANTT_ZOOM_SCALE);
+                          setPlannerPanelHeight(null);
                         }}
-                        className={`rounded-full px-3 py-1 text-xs capitalize transition-colors ${
-                          zoom === level ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-800'
-                        }`}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50"
                       >
-                        {level}
+                        Reset display
                       </button>
-                    ))}
+                    </div>
                   </div>
+                )}
+              </div>
+
+              {dependencyInsights.totalConflicts > 0 && (
+                <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                  {dependencyInsights.totalConflicts} conflict{dependencyInsights.totalConflicts === 1 ? '' : 's'}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setReportsOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
+              >
+                <FileText size={14} />
+                Reports
+              </button>
+              <div className="flex items-center whitespace-nowrap">
+                <div className="flex items-center gap-1 rounded-full bg-slate-100 p-1">
+                  {(['days', 'weeks', 'months'] as ZoomLevel[]).map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => {
+                        setActiveSavedViewId('');
+                        setZoom(level);
+                      }}
+                      className={`rounded-full px-3 py-1 text-xs capitalize transition-colors ${
+                        zoom === level ? 'bg-blue-600 text-white' : 'text-gray-600 hover:text-gray-800'
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
                 </div>
+              </div>
             </>
           }
         />
       </div>
 
-      <div
-        className="group relative h-2 flex-shrink-0 cursor-row-resize bg-white"
-        onMouseDown={(event) => {
-          event.preventDefault();
-          startPlannerResize(
-            event.clientY,
-            plannerPanelRef.current?.getBoundingClientRect().height ?? plannerPanelHeight ?? 120
-          );
-        }}
-        title="Resize planner area"
-      >
-        <div className="absolute left-4 right-4 top-1/2 h-px -translate-y-1/2 bg-slate-200 transition-colors group-hover:bg-blue-400" />
+      <div className="group relative -mt-px h-0 flex-shrink-0">
+        <button
+          type="button"
+          className="absolute inset-x-0 -top-1 h-2 cursor-row-resize bg-transparent"
+          onMouseDown={(event) => {
+            event.preventDefault();
+            startPlannerResize(
+              event.clientY,
+              plannerPanelRef.current?.getBoundingClientRect().height ?? plannerPanelHeight ?? MIN_PLANNER_PANEL_HEIGHT
+            );
+          }}
+          title="Resize planner area"
+          aria-label="Resize planner area"
+        />
+        <div className="pointer-events-none absolute left-4 right-4 top-0 h-px bg-slate-200 transition-colors group-hover:bg-blue-400" />
       </div>
 
       {filteredSections.length === 0 ? (
@@ -3767,6 +3868,9 @@ const GanttView: React.FC<GanttViewProps> = ({
           }}
           onClose={() => setViewSettingsOpen(false)}
           onSaved={loadTasks}
+          viewType="gantt"
+          currentViewName={activeSavedViewName || 'Working view'}
+          overviewContent={ganttCustomizeOverview}
         />
       )}
 
