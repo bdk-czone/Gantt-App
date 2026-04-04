@@ -47,14 +47,15 @@ const LAST_GANTT_VIEW_PREFIX = 'myproplanner:last-gantt-view:v1:';
 
 interface GanttViewProps {
   selectedLists: SelectedListTarget[];
-  viewMode: 'list' | 'gantt';
-  onViewModeChange: (mode: 'list' | 'gantt') => void;
+  viewMode: 'list' | 'gantt' | 'outlook';
+  onViewModeChange: (mode: 'list' | 'gantt' | 'outlook') => void;
   defaultTaskTreeExpanded: boolean;
   onToggleDefaultTaskTreeExpanded: () => void;
   onShareWorkload: () => void;
   agendaOpen: boolean;
   agendaNotificationCount: number;
   onToggleAgenda: () => void;
+  mailNotificationCount: number;
 }
 
 interface TaskSection {
@@ -668,6 +669,7 @@ const GanttView: React.FC<GanttViewProps> = ({
   agendaOpen,
   agendaNotificationCount,
   onToggleAgenda,
+  mailNotificationCount,
 }) => {
   const [sections, setSections] = React.useState<TaskSection[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -2619,6 +2621,7 @@ const GanttView: React.FC<GanttViewProps> = ({
           agendaOpen={agendaOpen}
           agendaNotificationCount={agendaNotificationCount}
           onToggleAgenda={onToggleAgenda}
+          mailNotificationCount={mailNotificationCount}
           fillHeight={Boolean(plannerPanelHeight)}
           extraActions={
             <>

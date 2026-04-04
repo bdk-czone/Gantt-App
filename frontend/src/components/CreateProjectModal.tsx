@@ -123,7 +123,12 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({ spaceOptions, d
         icon,
         start_date: startDate,
         end_date: endDate,
-        settings: selectedTemplate?.settings ?? null,
+        settings: selectedTemplate
+          ? {
+              ...selectedTemplate.settings,
+              mailTracking: undefined,
+            }
+          : null,
       });
 
       if (selectedTemplate) {

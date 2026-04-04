@@ -1,9 +1,9 @@
 import React from 'react';
-import { BarChart2, CalendarDays, Check, ChevronDown, Filter, List, RefreshCw, Settings2, Share2, X } from 'lucide-react';
+import { BarChart2, CalendarDays, Check, ChevronDown, Filter, List, Mail, RefreshCw, Settings2, Share2, X } from 'lucide-react';
 import type { SavedView, SelectedListTarget, StatusOption, TaskFocusMode } from '../types';
 import cloudzoneBackground from '../assets/cloudzone-background.jpg';
 
-type ViewMode = 'list' | 'gantt';
+type ViewMode = 'list' | 'gantt' | 'outlook';
 type OpenMenuId = 'filter' | null;
 
 interface PlannerToolbarProps {
@@ -37,6 +37,7 @@ interface PlannerToolbarProps {
   agendaOpen?: boolean;
   agendaNotificationCount?: number;
   onToggleAgenda?: () => void;
+  mailNotificationCount?: number;
   extraActions?: React.ReactNode;
   subControls?: React.ReactNode;
   fillHeight?: boolean;
@@ -130,6 +131,7 @@ const PlannerToolbar: React.FC<PlannerToolbarProps> = ({
   agendaOpen = false,
   agendaNotificationCount = 0,
   onToggleAgenda,
+  mailNotificationCount = 0,
   extraActions,
   subControls,
   fillHeight = false,
@@ -234,9 +236,28 @@ const PlannerToolbar: React.FC<PlannerToolbarProps> = ({
                 className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
                   viewMode === 'gantt' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                 }`}
+                >
+                  <BarChart2 size={14} />
+                  Gantt
+                </button>
+              <button
+                type="button"
+                onClick={() => onViewModeChange('outlook')}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  viewMode === 'outlook' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
               >
-                <BarChart2 size={14} />
-                Gantt
+                <Mail size={14} />
+                Outlook
+                {mailNotificationCount > 0 && (
+                  <span
+                    className={`inline-flex min-w-[1.15rem] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold ${
+                      viewMode === 'outlook' ? 'bg-white/20 text-white' : 'bg-red-500 text-white'
+                    }`}
+                  >
+                    {mailNotificationCount > 99 ? '99+' : mailNotificationCount}
+                  </span>
+                )}
               </button>
             </div>
           )}

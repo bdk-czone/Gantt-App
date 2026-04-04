@@ -60,6 +60,41 @@ export interface ViewPersistenceSettings {
   private: boolean;
 }
 
+export interface ProjectMailLink {
+  id: string;
+  taskId: string;
+  taskName: string;
+  threadId: string;
+  subject: string;
+  snippet: string;
+  fromName: string | null;
+  fromEmail: string | null;
+  latestMessageAt: string;
+  gmailUrl: string;
+  linkedAt: string;
+}
+
+export type ProjectCommunicationDirection = 'incoming' | 'outgoing' | 'note';
+
+export interface ProjectCommunicationEntry {
+  id: string;
+  occurredAt: string;
+  subject: string;
+  summary: string;
+  fromName: string | null;
+  fromEmail: string | null;
+  direction: ProjectCommunicationDirection;
+  createdAt: string;
+}
+
+export interface ProjectMailSettings {
+  customerName?: string;
+  customerEmails?: string[];
+  customerKeywords?: string[];
+  linkedTaskThreads?: ProjectMailLink[];
+  communicationLogEntries?: ProjectCommunicationEntry[];
+}
+
 export interface ProjectSettings {
   statuses: StatusOption[];
   customFields: CustomFieldDefinition[];
@@ -70,6 +105,7 @@ export interface ProjectSettings {
   builtInColumnTypes?: Partial<Record<string, BuiltInColumnEditorType>>;
   viewPersistence?: Partial<ViewPersistenceSettings>;
   notes?: string;
+  mailTracking?: Partial<ProjectMailSettings>;
 }
 
 export interface Task {

@@ -1,0 +1,127 @@
+
+Qestions:
+Category 1: Integration Architecture
+Q1: Which email system are you actually using?
+
+ Microsoft Outlook / Office 365 (work account)
+ Personal Outlook.com account
+ Gmail (you said "Outlook" but might mean "email view")
+ Other: ___________
+
+Q2: How do you want to authenticate to your email account?
+
+ Option A: One-time setup where I provide credentials once, app stores them encrypted
+ Option B: OAuth flow where I click "Connect to Microsoft" and authorize access (requires Azure app registration)
+ Option C: I manually forward relevant emails to the app, no direct API access needed
+ I don't know yet - recommend based on my setup
+
+Q3: What's your tolerance for external service dependencies?
+
+ High - I'm comfortable registering an Azure app, getting API keys, handling OAuth tokens
+ Medium - I can handle API setup if there's a clear guide
+ Low - I prefer solutions that work without external service accounts
+
+
+Category 2: Data Model & Relationships
+Q4: How do customers relate to projects in your workflow?
+
+ 1:1 - Every project has exactly one customer (e.g., "Project Alpha" → "Acme Corp")
+ 1:many - One customer can have multiple projects (e.g., "Acme Corp" → ["Project Alpha", "Project Beta"])
+ many:many - Projects can involve multiple customers (e.g., partnerships)
+ I haven't thought about this yet - help me model it
+
+Q5: Where should customer data live?
+
+ Option A: Add customer_id to the existing lists (projects) table, create new customers table
+ Option B: Customer is just a text field on the project (simpler, no new table)
+ Option C: Customers are a first-class entity like Workspaces (top-level navigation)
+
+Q6: How do you envision specifying email addresses?
+Example project: "Website Redesign for CloudZone"
+
+ Option A: I manually enter email addresses per project: julia@cloudzone.io, alex@cloudzone.io
+ Option B: I define a customer "CloudZone" once with emails, then link projects to that customer
+ Option C: The app auto-detects emails from project name or task assignees (requires parsing logic)
+
+
+Category 3: Email Display & Interaction Scope
+Q7: What does "entire interaction with the customer" mean?
+
+ Inbox only - emails I received from customer addresses
+ Sent + Inbox - full conversation thread (my replies + their messages)
+ Sent + Inbox + Attachments - full thread with file previews
+ Sent + Inbox + Calendar invites - meeting history too
+
+Q8: How should emails be matched to projects?
+
+ Match by sender/recipient email addresses only (e.g., show all emails from julia@cloudzone.io for CloudZone project)
+ Match by email addresses AND keywords (e.g., emails from julia@cloudzone.io that mention "CloudZone" or "website redesign")
+ Match by date range (only emails sent during project timeline)
+ All of the above with filters
+
+Q9: Should emails be stored in your database or queried live?
+
+ Cache in DB - fetch emails periodically (every 5 min), store in Postgres, fast display
+ Query live - hit email API every time I open Outlook view, always fresh but slower
+ Hybrid - cache metadata (subject, sender, date), fetch body on demand
+
+
+Category 4: Notifications & Real-time Updates
+Q10: What should "notify if there is a new email" look like?
+
+ Browser notification - desktop popup even if app is in background
+ In-app badge - red dot on Outlook view tab showing unread count
+ Email list highlight - new emails show with a visual indicator (bold/colored)
+ All of the above
+
+Q11: How real-time does this need to be?
+
+ Instant - I want to know within 30 seconds of email arrival (requires webhooks or aggressive polling)
+ Near real-time - checking every 5 minutes is fine
+ Manual refresh - I'll click "Refresh" when I want to check for new emails
+ I don't know - recommend based on implementation complexity
+
+
+Category 5: Scope & Constraints
+Q12: How many projects and emails are we talking about?
+
+Typical number of active projects: _______
+Average emails per project per month: _______
+Do you need historical emails (e.g., last 6 months) or just recent (last 30 days)?
+
+Q13: What's the MVP (minimum viable product) for this feature?
+Rank these by "must have for v1" vs "nice to have later":
+FeatureMust HaveNice to HaveDisplay list of emails per projectMark emails as read/unreadShow email thread viewSend replies from within the appAttach email to specific tasksSearch emails across all projectsDesktop notifications for new emailsMobile-responsive email view
+
+
+
+Here are my answers:
+
+
+i am using Outlook as my email app but i have a gmail account (work account) i need it mainly to see the conversation interaction with the customer so it should let me see specific emails as i customize it in each project. it should be simple with the lease overhead complexity. i can show you the structure of my project including folder tree and the readme file that explains about it. since i use it localy i dont intend to open it outside but use it on my personal mac only Q2: How do you want to authenticate to your email account? I don't know yet - recommend based on my setup
+Q3: Low - I prefer solutions that work without external service accounts Q4: One customer can have multiple projects (e.g., "Acme Corp" → ["Project Alpha", "Project Beta"]) in most cases (95%) each customer has 1 project Q5: not sure yet Q6: a combination of Option C: The app auto-detects emails from project name or task assignees (requires parsing logic) and Option A: I manually enter email addresses per project: `julia@cloudzone.io, alex@cloudzone.io` Q7: Sent + Inbox + Attachments - full thread with file previews Q8: Match by email addresses AND keywords (e.g., emails from `julia@cloudzone.io` that mention "CloudZone" or "website redesign") Q9: Hybrid - cache metadata (subject, sender, date), fetch body on demand Q10: All of the above Q11: Near real-time - checking every 5 minutes is fine Q12:
+* Typical number of active projects: 7
+* Average emails per project per month: 30
+* Do you need historical emails - just recent (last 40 days) Q13: Display a list of emails per project - must have Mark emails as read/unread - nice to have Show email thread view - must have Send replies from within the app - nice to have Attach email to specific tasks - must have Search emails across all projects - nice to have Desktop notifications for new emails - must have Mobile-responsive email view - nice to have
+i would prefer to have it the simplest way no azure and no complex steps. it should be simple and easy to implement even if it means giving up some of the things i wanted. i am using my work email ( ithink its gmail) shlomibd@cloudzone.io, since i have google drive.
+
+
+
+
+Do you want true Outlook/Microsoft 365 integration now, 
+or is a first phase with “open filtered mail search” acceptable?
+I am not sure it is outlook integration, i just need to be able to vew emails and conversation thread in a clear timeline with the customer for tracking and pacing
+
+
+Should the Outlook view support multiple selected projects at once, 
+or only one project at a time?
+it should allow me choosing multible projects as it does in the Gantt \ List views
+
+
+Should “new email” mean any new message from tracked contacts, only unread inbound emails, 
+or any thread activity?
+any thread activity from the specific customer
+
+Is this app meant to connect to one Outlook mailbox only, or different mailboxes 
+for different teammates?
+it isnt meant for replying back to the customer only to read \ see the interaction with the customer to have all necessary info in one place

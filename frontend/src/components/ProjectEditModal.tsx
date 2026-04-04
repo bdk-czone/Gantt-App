@@ -11,6 +11,7 @@ import {
   parseProjectDateValue,
   resolveProjectSchedule,
 } from '../lib/projectSettings';
+import { getProjectMailSettings, parseCommaSeparatedList, serializeCommaSeparatedList } from '../lib/mailSettings';
 import ColorPicker from './ColorPicker';
 import DatePicker from './DatePicker';
 import IconPicker from './IconPicker';
@@ -44,6 +45,7 @@ const ProjectEditModal: React.FC<ProjectEditModalProps> = ({
   onSaved,
 }) => {
   const initialSettings = React.useMemo(() => normalizeProjectSettings(project.settings), [project.settings]);
+  const initialMailSettings = React.useMemo(() => getProjectMailSettings(project.settings), [project.settings]);
   const initialSchedule = React.useMemo(
     () => resolveProjectSchedule(project.start_date, project.end_date, project.settings),
     [project.end_date, project.settings, project.start_date]
@@ -67,6 +69,9 @@ const ProjectEditModal: React.FC<ProjectEditModalProps> = ({
   const [startDate, setStartDate] = React.useState(initialSchedule.startDate);
   const [endDate, setEndDate] = React.useState(initialSchedule.endDate);
   const [notes, setNotes] = React.useState(initialSettings.notes ?? '');
+  const [customerName, setCustomerName] = React.useState(initialMailSettings.customerName);
+  const [customerEmails, setCustomerEmails] = React.useState(serializeCommaSeparatedList(initialMailSettings.customerEmails));
+  const [customerKeywords, setCustomerKeywords] = React.useState(serializeCommaSeparatedList(initialMailSettings.customerKeywords));
   const [statuses, setStatuses] = React.useState<StatusOption[]>(initialSettings.statuses);
   const [customFields, setCustomFields] = React.useState<CustomFieldDefinition[]>(initialSettings.customFields);
   const [columnLabels, setColumnLabels] = React.useState<Record<string, string>>(initialColumnLabels);
@@ -146,6 +151,13 @@ const ProjectEditModal: React.FC<ProjectEditModalProps> = ({
           hiddenBuiltInColumns: initialSettings.hiddenBuiltInColumns,
           builtInColumnTypes: initialSettings.builtInColumnTypes,
           viewPersistence: initialSettings.viewPersistence,
+          mailTracking: {
+            customerName: customerName.trim(),
+            customerEmails: parseCommaSeparatedList(customerEmails),
+            customerKeywords: parseCommaSeparatedList(customerKeywords),
+            linkedTaskThreads: initialMailSettings.linkedTaskThreads,
+            communicationLogEntries: initialMailSettings.communicationLogEntries,
+          },
         },
       });
       window.dispatchEvent(new Event('myproplanner:project-settings-updated'));
@@ -198,6 +210,7 @@ const ProjectEditModal: React.FC<ProjectEditModalProps> = ({
             hiddenBuiltInColumns: initialSettings.hiddenBuiltInColumns,
             builtInColumnTypes: initialSettings.builtInColumnTypes,
             viewPersistence: initialSettings.viewPersistence,
+            mailTracking: undefined,
           },
           tasks: projectTree.tasks,
           dependencies: projectTree.dependencies,
@@ -300,6 +313,50 @@ const ProjectEditModal: React.FC<ProjectEditModalProps> = ({
                 placeholder="Add any general info, context, or notes about this project…"
                 className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
               />
+            </div>
+          </section>
+
+          <section className="space-y-4 border-t border-gray-100 pt-5">
+            <div>
+              <h4 className="text-sm font-semibold text-gray-900">Customer Communication Details</h4>
+              <p className="text-xs text-gray-500">
+                Add optional customer reference details used by the communication log. These help keep project case history clear and searchable.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600">Customer Name</label>
+                <input
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="CloudZone"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600">Customer Emails</label>
+                <input
+                  value={customerEmails}
+                  onChange={(e) => setCustomerEmails(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                  placeholder="julia@cloudzone.io, alex@cloudzone.io"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-gray-600">Mail Keywords</label>
+              <input
+                value={customerKeywords}
+                onChange={(e) => setCustomerKeywords(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+                placeholder="website redesign, onboarding, migration"
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                Use comma-separated phrases for customer names, systems, or case themes you want to keep associated with this project.
+              </p>
             </div>
           </section>
 

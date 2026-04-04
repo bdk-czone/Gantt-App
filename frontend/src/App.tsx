@@ -3,6 +3,7 @@ import { KeyRound, LogOut, PanelLeftClose, PanelLeftOpen, ZoomIn, ZoomOut } from
 import AgendaSidebar from './components/AgendaSidebar';
 import AuthGate from './components/AuthGate';
 import ChangePasskeyModal from './components/ChangePasskeyModal';
+import OutlookView from './components/OutlookView';
 import ReminderToastStack from './components/ReminderToastStack';
 import ShareWorkloadModal from './components/ShareWorkloadModal';
 import Sidebar from './components/Sidebar';
@@ -19,7 +20,7 @@ import { TASKS_MUTATED_EVENT } from './lib/taskEvents';
 import type { SelectedListTarget } from './types';
 import cloudzoneBackground from './assets/cloudzone-background.jpg';
 
-type ViewMode = 'list' | 'gantt';
+type ViewMode = 'list' | 'gantt' | 'outlook';
 const UI_SCALE_KEY = 'myproplanner:ui-scale:v1';
 const APP_VIEW_MODE_KEY = 'myproplanner:app-view-mode:v1';
 const APP_SIDEBAR_COLLAPSED_KEY = 'myproplanner:app-sidebar-collapsed:v1';
@@ -63,7 +64,7 @@ const App: React.FC = () => {
   const [viewMode, setViewMode] = React.useState<ViewMode>(() => {
     try {
       const raw = localStorage.getItem(APP_VIEW_MODE_KEY);
-      return raw === 'gantt' ? 'gantt' : 'list';
+      return raw === 'gantt' || raw === 'outlook' ? raw : 'list';
     } catch {
       return 'list';
     }
@@ -414,8 +415,9 @@ const App: React.FC = () => {
                   agendaOpen={agendaOpen}
                   agendaNotificationCount={triggeredReminders.length}
                   onToggleAgenda={toggleAgenda}
+                  mailNotificationCount={0}
                 />
-              ) : (
+              ) : viewMode === 'gantt' ? (
                 <GanttView
                   selectedLists={selectedLists}
                   viewMode={viewMode}
@@ -426,6 +428,14 @@ const App: React.FC = () => {
                   agendaOpen={agendaOpen}
                   agendaNotificationCount={triggeredReminders.length}
                   onToggleAgenda={toggleAgenda}
+                  mailNotificationCount={0}
+                />
+              ) : (
+                <OutlookView
+                  selectedLists={selectedLists}
+                  viewMode={viewMode}
+                  onViewModeChange={setViewMode}
+                  mailNotificationCount={0}
                 />
               )}
             </div>

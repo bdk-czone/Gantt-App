@@ -1,8 +1,10 @@
 import React from 'react';
-import { RefreshCw, Trash2, X } from 'lucide-react';
+import { ExternalLink, Mail, RefreshCw, Trash2, X } from 'lucide-react';
 import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import type { CustomFieldDefinition, CustomFieldValue, Task, TaskDependency, TaskStatus } from '../types';
 import { addDependency, createTask, getAllListsFlat, getTask, getTaskTree, removeDependency, type FlatList, updateTask } from '../api';
+import { formatCompactDate } from '../lib/dateFormat';
+import { getTaskMailLinks } from '../lib/mailSettings';
 import { normalizeProjectSettings } from '../lib/projectSettings';
 import { parseProgressInput } from '../lib/progress';
 import ColorPicker from './ColorPicker';
@@ -101,6 +103,10 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
   const hasInitialContext = Array.isArray(initialTasks) && Array.isArray(initialDependencies);
   const projectSettings = normalizeProjectSettings(activeList?.listSettings);
   const defaultStatus = projectSettings.statuses[0]?.value ?? 'NOT_STARTED';
+  const linkedTaskThreads = React.useMemo(
+    () => (effectiveTask ? getTaskMailLinks(activeList?.listSettings, effectiveTask.id) : []),
+    [activeList?.listSettings, effectiveTask]
+  );
   const [status, setStatus] = React.useState<TaskStatus>(
     task?.status ?? defaultStatus
   );
@@ -733,6 +739,50 @@ const TaskEditModal: React.FC<TaskEditModalProps> = ({
                     </div>
                   );
                 })}
+              </div>
+            </section>
+          )}
+
+          {isEditing && linkedTaskThreads.length > 0 && (
+            <section className="space-y-3 border-t border-gray-100 pt-4">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-900">Linked Customer Threads</h4>
+                <p className="text-xs text-gray-500">
+                  These threads were attached from a mail view for quick task context.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                {linkedTaskThreads.map((link) => (
+                  <div key={link.id} className="rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-full bg-blue-50 p-1 text-blue-600">
+                            <Mail size={12} />
+                          </span>
+                          <p className="truncate text-sm font-semibold text-slate-900">{link.subject}</p>
+                        </div>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {link.fromName || link.fromEmail || 'Unknown sender'} · {formatCompactDate(link.latestMessageAt)}
+                        </p>
+                        {link.snippet && (
+                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-600">{link.snippet}</p>
+                        )}
+                      </div>
+
+                      <a
+                        href={link.gmailUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex shrink-0 items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                      >
+                        <ExternalLink size={12} />
+                        Open
+                      </a>
+                    </div>
+                  </div>
+                ))}
               </div>
             </section>
           )}

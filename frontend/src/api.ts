@@ -149,6 +149,21 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export interface CommunicationAIStatus {
+  configured: boolean;
+  provider: string | null;
+  model: string | null;
+}
+
+export interface CommunicationAIDraft {
+  occurredAt: string;
+  direction: 'incoming' | 'outgoing' | 'note' | 'unknown';
+  fromName: string;
+  fromEmail: string;
+  subject: string;
+  summary: string;
+}
+
 // Workspaces
 export const getWorkspaces = (): Promise<Workspace[]> =>
   request<Workspace[]>('/api/workspaces');
@@ -189,6 +204,34 @@ export const createList = (data: {
 
 export const getList = (id: string): Promise<ProjectList> =>
   request<ProjectList>(`/api/lists/${id}`).then((list) => normalizeList(list));
+
+export const launchOutlookDesktopSearch = (query: string): Promise<{ status: string }> =>
+  request<{ status: string }>('/api/outlook/launch-search', {
+    method: 'POST',
+    body: JSON.stringify({ query }),
+  });
+
+export const getCommunicationAIStatus = (): Promise<CommunicationAIStatus> =>
+  request<CommunicationAIStatus>('/api/ai/status');
+
+export const generateCommunicationAIDraft = (data: {
+  projectName?: string;
+  customerName?: string;
+  referenceEmails?: string[];
+  referenceKeywords?: string[];
+  rawText?: string;
+  imageDataUrl?: string;
+}): Promise<CommunicationAIDraft> =>
+  request<{ draft: CommunicationAIDraft }>('/api/ai/communication-draft', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  }).then((response) => response.draft);
+
+export const extractCommunicationScreenshotText = (imageDataUrl: string): Promise<string> =>
+  request<{ text: string }>('/api/ai/communication-screenshot-ocr', {
+    method: 'POST',
+    body: JSON.stringify({ imageDataUrl }),
+  }).then((response) => response.text);
 
 // Tasks
 export const getTaskTree = async (listId: string): Promise<TaskTreeResponse> =>

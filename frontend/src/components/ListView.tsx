@@ -27,14 +27,15 @@ import ViewSettingsModal from './ViewSettingsModal';
 
 interface ListViewProps {
   selectedLists: SelectedListTarget[];
-  viewMode: 'list' | 'gantt';
-  onViewModeChange: (mode: 'list' | 'gantt') => void;
+  viewMode: 'list' | 'gantt' | 'outlook';
+  onViewModeChange: (mode: 'list' | 'gantt' | 'outlook') => void;
   defaultTaskTreeExpanded: boolean;
   onToggleDefaultTaskTreeExpanded: () => void;
   onShareWorkload: () => void;
   agendaOpen: boolean;
   agendaNotificationCount: number;
   onToggleAgenda: () => void;
+  mailNotificationCount: number;
 }
 
 interface TaskSection {
@@ -133,6 +134,7 @@ const ListView: React.FC<ListViewProps> = ({
   agendaOpen,
   agendaNotificationCount,
   onToggleAgenda,
+  mailNotificationCount,
 }) => {
   const [sections, setSections] = React.useState<TaskSection[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -1259,6 +1261,7 @@ const ListView: React.FC<ListViewProps> = ({
         agendaOpen={agendaOpen}
         agendaNotificationCount={agendaNotificationCount}
         onToggleAgenda={onToggleAgenda}
+        mailNotificationCount={mailNotificationCount}
         extraActions={
           <details className="relative z-30">
             <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50">

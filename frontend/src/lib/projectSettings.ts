@@ -1,4 +1,11 @@
-import type { CustomFieldDefinition, ProjectSettings, StatusOption, ViewPersistenceSettings } from '../types';
+import type {
+  CustomFieldDefinition,
+  ProjectCommunicationDirection,
+  ProjectMailSettings,
+  ProjectSettings,
+  StatusOption,
+  ViewPersistenceSettings,
+} from '../types';
 
 type StatusContext = ProjectSettings | StatusOption[] | null | undefined;
 
@@ -34,6 +41,14 @@ export const DEFAULT_VIEW_PERSISTENCE: ViewPersistenceSettings = {
   autosave: true,
   pinned: false,
   private: true,
+};
+
+export const DEFAULT_PROJECT_MAIL_SETTINGS: ProjectMailSettings = {
+  customerName: '',
+  customerEmails: [],
+  customerKeywords: [],
+  linkedTaskThreads: [],
+  communicationLogEntries: [],
 };
 
 function resolveStatusOptions(settings: StatusContext): StatusOption[] {
@@ -77,6 +92,54 @@ export function orderByConfiguredIds<T extends { id: string }>(items: T[], order
 export function normalizeProjectSettings(settings: ProjectSettings | null | undefined): ProjectSettings {
   const customFields = settings?.customFields ?? [];
   const legacyBuiltInColumnTypes = settings?.builtInColumnTypes ?? {};
+  const rawMailTracking = settings?.mailTracking;
+  const normalizedMailTracking = {
+    customerName: typeof rawMailTracking?.customerName === 'string' ? rawMailTracking.customerName : '',
+    customerEmails:
+      Array.isArray(rawMailTracking?.customerEmails)
+        ? rawMailTracking.customerEmails.map((value) => String(value).trim()).filter(Boolean)
+        : [],
+    customerKeywords:
+      Array.isArray(rawMailTracking?.customerKeywords)
+        ? rawMailTracking.customerKeywords.map((value) => String(value).trim()).filter(Boolean)
+        : [],
+    linkedTaskThreads: Array.isArray(rawMailTracking?.linkedTaskThreads)
+      ? rawMailTracking.linkedTaskThreads
+          .map((link) => ({
+            id: String(link.id ?? ''),
+            taskId: String(link.taskId ?? ''),
+            taskName: String(link.taskName ?? ''),
+            threadId: String(link.threadId ?? ''),
+            subject: String(link.subject ?? ''),
+            snippet: String(link.snippet ?? ''),
+            fromName: link.fromName ? String(link.fromName) : null,
+            fromEmail: link.fromEmail ? String(link.fromEmail) : null,
+            latestMessageAt: String(link.latestMessageAt ?? ''),
+            gmailUrl: String(link.gmailUrl ?? ''),
+            linkedAt: String(link.linkedAt ?? ''),
+          }))
+          .filter((link) => link.id && link.taskId && link.threadId)
+      : [],
+    communicationLogEntries: Array.isArray(rawMailTracking?.communicationLogEntries)
+      ? rawMailTracking.communicationLogEntries
+          .map((entry) => ({
+            id: String(entry.id ?? ''),
+            occurredAt: String(entry.occurredAt ?? ''),
+            subject: String(entry.subject ?? ''),
+            summary: String(entry.summary ?? ''),
+            fromName: entry.fromName ? String(entry.fromName) : null,
+            fromEmail: entry.fromEmail ? String(entry.fromEmail) : null,
+            direction:
+              entry.direction === 'outgoing' || entry.direction === 'note' ? entry.direction : 'incoming',
+            createdAt: String(entry.createdAt ?? ''),
+          }))
+          .map((entry) => ({
+            ...entry,
+            direction: entry.direction as ProjectCommunicationDirection,
+          }))
+          .filter((entry) => entry.id && entry.occurredAt && entry.subject && entry.summary)
+      : [],
+  };
   return {
     statuses:
       settings?.statuses && settings.statuses.length > 0
@@ -104,6 +167,10 @@ export function normalizeProjectSettings(settings: ProjectSettings | null | unde
       ...(settings?.viewPersistence ?? {}),
     },
     notes: settings?.notes ?? '',
+    mailTracking: {
+      ...DEFAULT_PROJECT_MAIL_SETTINGS,
+      ...normalizedMailTracking,
+    },
   };
 }
 

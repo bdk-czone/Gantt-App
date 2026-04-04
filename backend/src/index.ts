@@ -10,6 +10,8 @@ import listsRouter from './routes/lists';
 import tasksRouter from './routes/tasks';
 import sharesRouter from './routes/shares';
 import authRouter from './routes/auth';
+import aiRouter from './routes/ai';
+import outlookRouter from './routes/outlook';
 import { listResourcesRouter, resourcesRouter } from './routes/resources';
 import { requireAuth } from './middleware/requireAuth';
 import { ensureSchema } from './ensureSchema';
@@ -42,7 +44,7 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(requireAuth);
 
 // Health check
@@ -52,11 +54,13 @@ app.get('/api/health', (_req, res) => {
 
 // Routes
 app.use('/api/auth', authRouter);
+app.use('/api/ai', aiRouter);
 app.use('/api/workspaces', workspacesRouter);
 app.use('/api/spaces', spacesRouter);
 app.use('/api/lists', listsRouter);
 app.use('/api/tasks', tasksRouter);
 app.use('/api/shares', sharesRouter);
+app.use('/api/outlook', outlookRouter);
 app.use('/api/lists', listResourcesRouter);
 app.use('/api/resources', resourcesRouter);
 
