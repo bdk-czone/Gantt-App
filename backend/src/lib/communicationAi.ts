@@ -30,8 +30,9 @@ export class CommunicationAIError extends Error {
 
 // ── Provider config ────────────────────────────────────────────────────────────
 
-const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai';
-const DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash-lite'; // cheapest free-tier vision model
+// Native Gemini REST API (not OpenAI-compat shim)
+const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 
 const OPENAI_BASE_URL = 'https://api.openai.com/v1';
 const DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini';
@@ -127,42 +128,6 @@ function buildSystemPrompt(request: CommunicationAIRequest) {
     .join('\n');
 }
 
-/** Build the `messages` array for the chat/completions endpoint (works for both Gemini and OpenAI). */
-function buildMessages(request: CommunicationAIRequest, systemPrompt: string) {
-  type ContentPart =
-    | { type: 'text'; text: string }
-    | { type: 'image_url'; image_url: { url: string; detail?: string } };
-
-  const userContent: ContentPart[] = [];
-
-  if (request.rawText?.trim()) {
-    userContent.push({
-      type: 'text',
-      text: `Pasted email or thread text:\n\n${request.rawText.trim()}`,
-    });
-  }
-
-  if (request.imageDataUrl?.trim()) {
-    userContent.push({
-      type: 'text',
-      text: 'Analyze this email screenshot and extract the structured log entry.',
-    });
-    userContent.push({
-      type: 'image_url',
-      image_url: { url: validateImageDataUrl(request.imageDataUrl), detail: 'high' },
-    });
-  }
-
-  if (userContent.length === 0) {
-    throw new CommunicationAIError('Provide pasted email text or a pasted screenshot first.', 400);
-  }
-
-  return [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userContent },
-  ];
-}
-
 function normalizeDraft(value: any): CommunicationAIDraft {
   return {
     occurredAt: typeof value?.occurredAt === 'string' ? value.occurredAt.trim() : '',
@@ -177,44 +142,78 @@ function normalizeDraft(value: any): CommunicationAIDraft {
   };
 }
 
-// ── Gemini via OpenAI-compat /chat/completions ─────────────────────────────────
+// ── Gemini native REST API (/v1beta/models/{model}:generateContent) ───────────
 
 async function callGemini(
   config: ReturnType<typeof getGeminiConfig>,
-  messages: object[],
+  request: CommunicationAIRequest,
+  systemPrompt: string,
 ): Promise<CommunicationAIDraft> {
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+  // Build native Gemini parts array
+  type GeminiPart =
+    | { text: string }
+    | { inline_data: { mime_type: string; data: string } };
+
+  const parts: GeminiPart[] = [];
+
+  if (request.rawText?.trim()) {
+    parts.push({ text: `Pasted email or thread text:\n\n${request.rawText.trim()}` });
+  }
+
+  if (request.imageDataUrl?.trim()) {
+    const validated = validateImageDataUrl(request.imageDataUrl);
+    const commaIdx = validated.indexOf(',');
+    const mimeMatch = validated.slice(0, commaIdx).match(/^data:(image\/[^;]+);base64$/i);
+    const mimeType = mimeMatch![1].toLowerCase();
+    const base64Data = validated.slice(commaIdx + 1);
+    parts.push({ text: 'Analyze this email screenshot and extract the structured log entry.' });
+    parts.push({ inline_data: { mime_type: mimeType, data: base64Data } });
+  }
+
+  if (parts.length === 0) {
+    throw new CommunicationAIError('Provide pasted email text or a pasted screenshot first.', 400);
+  }
+
+  const url = `${config.baseUrl}/models/${config.model}:generateContent?key=${config.apiKey}`;
+
+  const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: config.model,
-      messages,
-      response_format: { type: 'json_object' },
-      temperature: 0.1,
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts }],
+      generationConfig: {
+        responseMimeType: 'application/json',
+        temperature: 0.1,
+      },
     }),
   });
 
   const payload: any = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const apiError =
-      typeof payload?.error?.message === 'string'
-        ? payload.error.message
-        : 'Gemini could not analyze that email.';
+    let apiError: string;
+    if (response.status === 429) {
+      apiError =
+        typeof payload?.error?.message === 'string'
+          ? `Gemini rate limit: ${payload.error.message}`
+          : 'Gemini free-tier rate limit hit (429). Wait a moment and try again.';
+    } else {
+      apiError =
+        typeof payload?.error?.message === 'string'
+          ? payload.error.message
+          : `Gemini returned HTTP ${response.status}.`;
+    }
     throw new CommunicationAIError(apiError, response.status >= 400 && response.status < 500 ? 400 : 502);
   }
 
-  const text: string = payload?.choices?.[0]?.message?.content ?? '';
+  const text: string = payload?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
   if (!text.trim()) {
     throw new CommunicationAIError('Gemini returned an empty response.', 502);
   }
 
   let parsed: unknown;
   try {
-    // Gemini sometimes wraps JSON in markdown fences
     const cleaned = text.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
     parsed = JSON.parse(cleaned);
   } catch {
@@ -334,8 +333,7 @@ export async function generateCommunicationAIDraft(request: CommunicationAIReque
   const systemPrompt = buildSystemPrompt(request);
 
   if (provider.name === 'gemini') {
-    const messages = buildMessages(request, systemPrompt);
-    return callGemini(provider, messages);
+    return callGemini(provider, request, systemPrompt);
   }
 
   // OpenAI fallback
