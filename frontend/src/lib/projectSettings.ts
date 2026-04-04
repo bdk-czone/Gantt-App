@@ -1,5 +1,7 @@
 import type { CustomFieldDefinition, ProjectSettings, StatusOption, ViewPersistenceSettings } from '../types';
 
+type StatusContext = ProjectSettings | StatusOption[] | null | undefined;
+
 export const DEFAULT_STATUSES: StatusOption[] = [
   { value: 'NOT_STARTED', label: 'Not Started', color: '#E11D48' },
   { value: 'IN_PROGRESS', label: 'In Progress', color: '#2563EB' },
@@ -33,6 +35,24 @@ export const DEFAULT_VIEW_PERSISTENCE: ViewPersistenceSettings = {
   pinned: false,
   private: true,
 };
+
+function resolveStatusOptions(settings: StatusContext): StatusOption[] {
+  if (Array.isArray(settings)) {
+    return settings.length > 0 ? settings : DEFAULT_STATUSES;
+  }
+  return normalizeProjectSettings(settings).statuses;
+}
+
+function buildStatusSignature(status: string, settings: StatusContext) {
+  const option =
+    resolveStatusOptions(settings).find((item) => item.value === status) || {
+      value: status,
+      label: status.replace(/_/g, ' '),
+      color: '#64748B',
+    };
+
+  return `${option.value} ${option.label}`.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
 
 export function resolveColumnOrder(
   columnOrder: string[] | null | undefined,
@@ -76,7 +96,7 @@ export function normalizeProjectSettings(settings: ProjectSettings | null | unde
         ? { onboarding_completion: 'text' as const }
         : legacyBuiltInColumnTypes.onboarding_completion === 'date'
           ? { onboarding_completion: 'date' as const }
-        : {}),
+          : {}),
       ...legacyBuiltInColumnTypes,
     },
     viewPersistence: {
@@ -87,10 +107,10 @@ export function normalizeProjectSettings(settings: ProjectSettings | null | unde
   };
 }
 
-export function getStatusOption(status: string, settings: ProjectSettings | null | undefined): StatusOption {
-  const normalized = normalizeProjectSettings(settings);
+export function getStatusOption(status: string, settings: StatusContext): StatusOption {
+  const statuses = resolveStatusOptions(settings);
   return (
-    normalized.statuses.find((option) => option.value === status) || {
+    statuses.find((option) => option.value === status) || {
       value: status,
       label: status.replace(/_/g, ' '),
       color: '#64748B',
@@ -98,10 +118,25 @@ export function getStatusOption(status: string, settings: ProjectSettings | null
   );
 }
 
-export function isCompletedStatus(status: string, settings: ProjectSettings | null | undefined): boolean {
-  const option = getStatusOption(status, settings);
-  const signature = `${option.value} ${option.label}`.toLowerCase();
+export function isCompletedStatus(status: string, settings: StatusContext): boolean {
+  const signature = buildStatusSignature(status, settings);
   return ['complete', 'completed', 'done', 'closed', 'finished'].some((token) => signature.includes(token));
+}
+
+export function isNotStartedStatus(status: string, settings: StatusContext): boolean {
+  if (isCompletedStatus(status, settings)) return false;
+  const signature = buildStatusSignature(status, settings);
+  return ['not started', 'todo', 'to do', 'backlog', 'queued', 'planned', 'pending', 'ready'].some((token) =>
+    signature.includes(token)
+  );
+}
+
+export function isInProgressStatus(status: string, settings: StatusContext): boolean {
+  if (isCompletedStatus(status, settings)) return false;
+  const signature = buildStatusSignature(status, settings);
+  return ['in progress', 'progress', 'active', 'ongoing', 'working', 'doing', 'underway'].some((token) =>
+    signature.includes(token)
+  );
 }
 
 export function getCompletedStatusValue(settings: ProjectSettings | null | undefined) {

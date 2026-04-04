@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Edit2, Plus, X } from 'lucide-react';
+import { Check, ChevronDown, Edit2, Plus, X } from 'lucide-react';
 import type { StatusOption, TaskStatus } from '../types';
 import { DEFAULT_COLUMN_LABELS, DEFAULT_COLUMN_ORDER, getStatusOption } from '../lib/projectSettings';
 
@@ -12,12 +12,20 @@ interface StatusPillProps {
   onEditOption?: (value: string, updates: Pick<StatusOption, 'label' | 'color'>) => Promise<void>;
 }
 
-function hexToRgba(hex: string, alpha: number) {
+function hexToRgb(hex: string) {
   const normalized = hex.replace('#', '');
-  if (normalized.length !== 6) return `rgba(148, 163, 184, ${alpha})`;
-  const red = parseInt(normalized.slice(0, 2), 16);
-  const green = parseInt(normalized.slice(2, 4), 16);
-  const blue = parseInt(normalized.slice(4, 6), 16);
+  if (normalized.length !== 6) {
+    return { red: 148, green: 163, blue: 184 };
+  }
+  return {
+    red: parseInt(normalized.slice(0, 2), 16),
+    green: parseInt(normalized.slice(2, 4), 16),
+    blue: parseInt(normalized.slice(4, 6), 16),
+  };
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const { red, green, blue } = hexToRgb(hex);
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
@@ -30,6 +38,39 @@ function toStatusValue(label: string) {
       .replace(/^_+|_+$/g, '') || 'CUSTOM_STATUS'
   );
 }
+
+const StatusChip: React.FC<{
+  label: string;
+  color: string;
+  active?: boolean;
+  editable?: boolean;
+}> = ({ label, color, active = false, editable = false }) => {
+  const borderColor = active ? hexToRgba(color, 0.34) : hexToRgba(color, 0.22);
+  const background = active
+    ? `linear-gradient(135deg, ${hexToRgba(color, 0.2)} 0%, ${hexToRgba(color, 0.08)} 100%)`
+    : `linear-gradient(135deg, ${hexToRgba(color, 0.14)} 0%, ${hexToRgba(color, 0.05)} 100%)`;
+
+  return (
+    <span
+      className={`inline-flex max-w-full items-center gap-2 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-semibold tracking-[0.01em] shadow-sm ${
+        editable ? 'pr-2' : ''
+      }`}
+      style={{
+        color,
+        borderColor,
+        background,
+        boxShadow: `inset 0 1px 0 ${hexToRgba('#ffffff', 0.45)}`,
+      }}
+    >
+      <span
+        className="h-2 w-2 shrink-0 rounded-full"
+        style={{ backgroundColor: color, boxShadow: `0 0 0 4px ${hexToRgba(color, 0.14)}` }}
+      />
+      <span className="truncate">{label}</span>
+      {editable ? <ChevronDown size={12} className="shrink-0 opacity-70" /> : null}
+    </span>
+  );
+};
 
 const StatusPill: React.FC<StatusPillProps> = ({
   status,
@@ -45,6 +86,8 @@ const StatusPill: React.FC<StatusPillProps> = ({
   const [draftLabel, setDraftLabel] = React.useState('');
   const [draftColor, setDraftColor] = React.useState('#2563EB');
   const [saving, setSaving] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+  const draftLabelInputRef = React.useRef<HTMLInputElement>(null);
   const option = getStatusOption(status, {
     statuses: options ?? [],
     customFields: [],
@@ -52,17 +95,25 @@ const StatusPill: React.FC<StatusPillProps> = ({
     columnOrder: DEFAULT_COLUMN_ORDER,
     savedViews: [],
   });
-  const ref = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     if (!open) return;
-    const handler = (event: MouseEvent) => {
+    const handlePointerDown = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) {
         setOpen(false);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, [open]);
 
   React.useEffect(() => {
@@ -74,14 +125,25 @@ const StatusPill: React.FC<StatusPillProps> = ({
     setSaving(false);
   }, [open]);
 
-  const backgroundColor = hexToRgba(option.color, 0.12);
+  React.useEffect(() => {
+    if (editingValue === null) return;
+    window.setTimeout(() => draftLabelInputRef.current?.focus(), 0);
+  }, [editingValue]);
+
   const optionList = options && options.length > 0 ? options : [option];
   const filteredOptions = optionList.filter((item) => item.label.toLowerCase().includes(searchQuery.trim().toLowerCase()));
 
   const openEditor = (nextValue: string | 'new', nextLabel: string, nextColor: string) => {
+    setSearchQuery('');
     setEditingValue(nextValue);
     setDraftLabel(nextLabel);
     setDraftColor(nextColor);
+  };
+
+  const resetEditor = () => {
+    setEditingValue(null);
+    setDraftLabel('');
+    setDraftColor('#2563EB');
   };
 
   const handleSave = async () => {
@@ -116,160 +178,166 @@ const StatusPill: React.FC<StatusPillProps> = ({
   };
 
   if (!editable) {
-    return (
-      <span
-        className="inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium"
-        style={{ backgroundColor, color: option.color }}
-      >
-        {option.label}
-      </span>
-    );
+    return <StatusChip label={option.label} color={option.color} />;
   }
 
   return (
-    <div ref={ref} className="relative inline-block">
+    <div ref={ref} className="relative inline-flex max-w-full">
       <button
+        type="button"
         onClick={() => setOpen((current) => !current)}
-        className="inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium transition-opacity hover:opacity-80"
-        style={{ backgroundColor, color: option.color }}
+        className="group inline-flex max-w-full rounded-full transition-transform hover:-translate-y-[1px]"
       >
-        {option.label}
+        <StatusChip label={option.label} color={option.color} active={open} editable />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-2xl border border-gray-200 bg-white p-3 shadow-2xl">
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-900">Status</span>
+        <div className="absolute left-0 top-full z-50 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-[1.25rem] border border-slate-200 bg-white p-3 shadow-2xl">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">Update status</p>
+              <p className="mt-1 text-xs text-slate-500">Pick a status or adjust the status set for this project.</p>
+            </div>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+              className="rounded-full p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
             >
               <X size={14} />
             </button>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3">
+            <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Current</p>
+            <StatusChip label={option.label} color={option.color} active />
           </div>
 
           <input
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             placeholder="Search statuses"
-            className="mb-3 w-full rounded-xl border border-gray-300 px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500"
+            className="mt-3 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500"
           />
 
-          <div className="max-h-64 space-y-1 overflow-y-auto">
+          {editingValue !== null ? (
+            <div className="mt-3 rounded-[1.25rem] border border-slate-200 bg-slate-50/80 p-3">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">{editingValue === 'new' ? 'New status' : 'Edit status'}</p>
+                  <p className="mt-1 text-xs text-slate-500">Choose a label and color for the status pill.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={resetEditor}
+                  className="rounded-full p-1 text-slate-400 transition-colors hover:bg-white hover:text-slate-600"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <input
+                  ref={draftLabelInputRef}
+                  value={draftLabel}
+                  onChange={(event) => setDraftLabel(event.target.value)}
+                  placeholder="Status name"
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500"
+                />
+                <label className="flex items-center justify-between gap-3 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-600">
+                  Color
+                  <input
+                    type="color"
+                    value={draftColor}
+                    onChange={(event) => setDraftColor(event.target.value)}
+                    className="h-8 w-12 cursor-pointer rounded border-0 bg-transparent p-0"
+                  />
+                </label>
+                <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">Preview</p>
+                  <StatusChip label={draftLabel.trim() || 'Status preview'} color={draftColor} active />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={resetEditor}
+                    className="rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleSave()}
+                    disabled={saving || !draftLabel.trim()}
+                    className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {saving ? 'Saving...' : editingValue === 'new' ? 'Add status' : 'Save changes'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
             {filteredOptions.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-gray-200 px-3 py-4 text-sm text-gray-400">
+              <div className="rounded-2xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-400">
                 No statuses match that search.
               </div>
             ) : (
-              filteredOptions.map((nextOption) => (
-                <div
-                  key={nextOption.value}
-                  className="flex items-center gap-2 rounded-xl px-2 py-1.5 transition-colors hover:bg-gray-50"
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onChange?.(nextOption.value);
-                      setOpen(false);
-                    }}
-                    className="flex flex-1 items-center justify-between gap-3 rounded-xl px-2 py-1.5 text-left"
+              filteredOptions.map((nextOption) => {
+                const selected = nextOption.value === option.value;
+                return (
+                  <div
+                    key={nextOption.value}
+                    className={`flex items-center gap-2 rounded-2xl border px-2 py-2 transition-colors ${
+                      selected ? 'border-blue-200 bg-blue-50/70' : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
                   >
-                    <span
-                      className="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold uppercase tracking-wide"
-                      style={{
-                        backgroundColor: hexToRgba(nextOption.color, 0.14),
-                        color: nextOption.color,
-                      }}
-                    >
-                      {nextOption.label}
-                    </span>
-                    {nextOption.value === option.value && <Check size={16} className="text-gray-700" />}
-                  </button>
-                  {(onEditOption || onAddOption) && (
-                    <button
-                      type="button"
-                      onClick={() => openEditor(nextOption.value, nextOption.label, nextOption.color)}
-                      className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700"
-                      title="Edit status"
-                    >
-                      <Edit2 size={14} />
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-
-          {(onEditOption || onAddOption) && (
-            <>
-              <button
-                type="button"
-                onClick={() => openEditor('new', '', option.color)}
-                className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
-              >
-                <Plus size={14} />
-                Add new status
-              </button>
-
-              {editingValue !== null ? (
-                <div className="mt-3 rounded-2xl border border-gray-200 bg-slate-50 p-3">
-                  <div className="mb-3 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-gray-800">
-                      {editingValue === 'new' ? 'New status' : 'Edit status'}
-                    </span>
                     <button
                       type="button"
                       onClick={() => {
-                        setEditingValue(null);
-                        setDraftLabel('');
-                        setDraftColor('#2563EB');
+                        onChange?.(nextOption.value);
+                        setOpen(false);
                       }}
-                      className="rounded-full p-1 text-gray-400 transition-colors hover:bg-white hover:text-gray-600"
+                      className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-1 py-1 text-left"
                     >
-                      <X size={14} />
+                      <div className="min-w-0">
+                        <StatusChip label={nextOption.label} color={nextOption.color} active={selected} />
+                      </div>
+                      {selected ? <Check size={16} className="shrink-0 text-blue-700" /> : null}
                     </button>
-                  </div>
-                  <div className="space-y-3">
-                    <input
-                      value={draftLabel}
-                      onChange={(event) => setDraftLabel(event.target.value)}
-                      placeholder="Status name"
-                      className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm outline-none transition-colors focus:border-blue-500"
-                    />
-                    <label className="flex items-center justify-between gap-3 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-600">
-                      Color
-                      <input
-                        type="color"
-                        value={draftColor}
-                        onChange={(event) => setDraftColor(event.target.value)}
-                        className="h-8 w-12 cursor-pointer rounded border-0 bg-transparent p-0"
-                      />
-                    </label>
-                    <div className="flex justify-end gap-2">
+                    {onEditOption || onAddOption ? (
                       <button
                         type="button"
-                        onClick={() => {
-                          setEditingValue(null);
-                          setDraftLabel('');
+                        onMouseDown={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
                         }}
-                        className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 transition-colors hover:bg-white"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          openEditor(nextOption.value, nextOption.label, nextOption.color);
+                        }}
+                        className="rounded-xl p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                        title="Edit status"
                       >
-                        Cancel
+                        <Edit2 size={14} />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => void handleSave()}
-                        disabled={saving || !draftLabel.trim()}
-                        className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {saving ? 'Saving...' : editingValue === 'new' ? 'Add status' : 'Save changes'}
-                      </button>
-                    </div>
+                    ) : null}
                   </div>
-                </div>
-              ) : null}
-            </>
-          )}
+                );
+              })
+            )}
+          </div>
+
+          {onEditOption || onAddOption ? (
+            <button
+              type="button"
+              onClick={() => openEditor('new', '', option.color)}
+              className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
+            >
+              <Plus size={14} />
+              Add new status
+            </button>
+          ) : null}
         </div>
       )}
     </div>

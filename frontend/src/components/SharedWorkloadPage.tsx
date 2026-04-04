@@ -2,7 +2,8 @@ import React from 'react';
 import { CalendarDays, ExternalLink, FolderKanban, Link2, RefreshCw } from 'lucide-react';
 import { getSharedWorkload } from '../api';
 import { formatCompactDate } from '../lib/dateFormat';
-import { getStatusOption, isCompletedStatus, normalizeProjectSettings } from '../lib/projectSettings';
+import { parseProgressInput } from '../lib/progress';
+import { getStatusOption, isCompletedStatus, isInProgressStatus, isNotStartedStatus, normalizeProjectSettings } from '../lib/projectSettings';
 import type { SelectedListTarget, SharedWorkloadResponse, Task } from '../types';
 import StatusPill from './StatusPill';
 
@@ -18,9 +19,41 @@ function flattenTasks(tasks: Task[], result: Array<Task & { depthLevel: number }
   return result;
 }
 
-function getTaskProgress(task: Task) {
-  const value = task.custom_fields?.progress;
-  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : null;
+function getStoredTaskProgress(task: Task, settings: ReturnType<typeof normalizeProjectSettings>) {
+  const progressFieldIds = settings.customFields.filter((field) => field.type === 'progress').map((field) => field.id);
+  const candidates = [
+    task.custom_fields?.progress,
+    task.custom_fields?.onboarding_completion_progress,
+    ...progressFieldIds.map((fieldId) => task.custom_fields?.[fieldId]),
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = parseProgressInput(candidate);
+    if (parsed !== null) return parsed;
+  }
+
+  return null;
+}
+
+function getTaskProgressDisplay(task: Task, settings: ReturnType<typeof normalizeProjectSettings>) {
+  const storedProgress = getStoredTaskProgress(task, settings);
+  if (storedProgress !== null) {
+    return { barValue: storedProgress, label: `${storedProgress}%`, usesStatusFallback: false };
+  }
+
+  if (isCompletedStatus(task.status, settings)) {
+    return { barValue: 100, label: '100%', usesStatusFallback: true };
+  }
+
+  if (isInProgressStatus(task.status, settings)) {
+    return { barValue: 12, label: 'In progress', usesStatusFallback: true };
+  }
+
+  if (isNotStartedStatus(task.status, settings)) {
+    return { barValue: 0, label: 'Not started', usesStatusFallback: true };
+  }
+
+  return { barValue: 0, label: 'Not set', usesStatusFallback: true };
 }
 
 function buildSectionSummary(target: SelectedListTarget, tasks: Task[]) {
@@ -34,8 +67,9 @@ function buildSectionSummary(target: SelectedListTarget, tasks: Task[]) {
       !isCompletedStatus(task.status, settings)
   ).length;
   const progressValues = flatTasks.map((task) => {
-    if (isCompletedStatus(task.status, settings)) return 100;
-    return getTaskProgress(task) ?? 0;
+    const storedProgress = getStoredTaskProgress(task, settings);
+    if (storedProgress !== null) return storedProgress;
+    return isCompletedStatus(task.status, settings) ? 100 : 0;
   });
   const averageProgress =
     progressValues.length > 0
@@ -255,8 +289,9 @@ const SharedWorkloadPage: React.FC<SharedWorkloadPageProps> = ({ token }) => {
                         </tr>
                       ) : (
                         flatTasks.map((task) => {
-                          const progress = getTaskProgress(task);
+                          const progressDisplay = getTaskProgressDisplay(task, settings);
                           const statusOption = getStatusOption(task.status, settings);
+                          const activeWithoutValue = progressDisplay.usesStatusFallback && isInProgressStatus(task.status, settings);
 
                           return (
                             <tr key={task.id} className="align-top">
@@ -273,15 +308,15 @@ const SharedWorkloadPage: React.FC<SharedWorkloadPageProps> = ({ token }) => {
                                 <div className="min-w-[9rem]">
                                   <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                                     <div
-                                      className="h-full rounded-full"
+                                      className={`h-full rounded-full ${activeWithoutValue ? 'opacity-55' : ''}`}
                                       style={{
-                                        width: `${progress ?? (isCompletedStatus(task.status, settings) ? 100 : 0)}%`,
+                                        width: `${progressDisplay.barValue}%`,
                                         backgroundColor: statusOption.color,
                                       }}
                                     />
                                   </div>
                                   <p className="mt-1 text-xs text-slate-500">
-                                    {progress !== null ? `${progress}%` : isCompletedStatus(task.status, settings) ? '100%' : 'Not set'}
+                                    {progressDisplay.label}
                                   </p>
                                 </div>
                               </td>

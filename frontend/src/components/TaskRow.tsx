@@ -3,73 +3,22 @@ import { ChevronDown, ChevronRight, Edit2, Plus, Trash2 } from 'lucide-react';
 import type { BuiltInColumnEditorType, CustomFieldValue, StatusOption, Task } from '../types';
 import { formatCompactDate } from '../lib/dateFormat';
 import { EntityIcon, getAppearanceColor } from '../lib/appearance';
+import { isCompletedStatus, isInProgressStatus, isNotStartedStatus } from '../lib/projectSettings';
+import { parseProgressInput } from '../lib/progress';
 import DatePicker from './DatePicker';
+import { InteractiveProgressBar, ProgressBadge } from './ProgressFieldControl';
 import StatusPill from './StatusPill';
 import type { ListColumnConfig } from './listColumns';
 
-function parseProgressInput(value: unknown) {
-  if (typeof value === 'number' && !Number.isNaN(value)) {
-    return Math.max(0, Math.min(100, value));
-  }
-
-  if (typeof value === 'string') {
-    const normalized = value.trim().replace(/%$/, '');
-    if (!normalized) return null;
-    const parsed = Number(normalized);
-    if (!Number.isNaN(parsed)) {
-      return Math.max(0, Math.min(100, parsed));
-    }
-  }
-
-  return null;
+function areCustomFieldsEqual(
+  left: Record<string, CustomFieldValue> | undefined,
+  right: Record<string, CustomFieldValue> | undefined
+) {
+  const leftEntries = Object.entries(left ?? {});
+  const rightEntries = Object.entries(right ?? {});
+  if (leftEntries.length !== rightEntries.length) return false;
+  return leftEntries.every(([key, value]) => right?.[key] === value);
 }
-
-const ProgressEditor: React.FC<{
-  value: string;
-  onValueChange: (value: string) => void;
-  onCommit: () => void;
-  onCancel: () => void;
-  inputRef?: React.RefObject<HTMLInputElement>;
-}> = ({ value, onValueChange, onCommit, onCancel, inputRef }) => {
-  const numericValue = parseProgressInput(value) ?? 0;
-
-  return (
-    <div
-      className="flex items-center gap-2"
-      onClick={(event) => event.stopPropagation()}
-      onDoubleClick={(event) => event.stopPropagation()}
-    >
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={1}
-        value={numericValue}
-        onChange={(event) => onValueChange(event.target.value)}
-        onPointerUp={() => onCommit()}
-        className="min-w-0 flex-1 accent-blue-600"
-      />
-      <div className="relative w-16 shrink-0">
-        <input
-          ref={inputRef}
-          value={value}
-          onChange={(event) => onValueChange(event.target.value)}
-          onBlur={onCommit}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') onCommit();
-            if (event.key === 'Escape') onCancel();
-          }}
-          className="w-full rounded border border-blue-300 px-2 py-1 pr-5 text-xs outline-none focus:border-blue-500"
-          placeholder="0"
-          autoFocus
-        />
-        <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-gray-400">
-          %
-        </span>
-      </div>
-    </div>
-  );
-};
 
 interface TaskRowProps {
   task: Task;
@@ -113,21 +62,12 @@ const TaskRow: React.FC<TaskRowProps> = ({
   const [editingType, setEditingType] = React.useState(false);
   const [typeValue, setTypeValue] = React.useState(task.task_type || '');
   const [editingOnboardingText, setEditingOnboardingText] = React.useState(false);
-  const [editingOnboardingProgress, setEditingOnboardingProgress] = React.useState(false);
-  const [editingCustomProgressFieldId, setEditingCustomProgressFieldId] = React.useState<string | null>(null);
-  const [customProgressValue, setCustomProgressValue] = React.useState('');
   const [onboardingTextValue, setOnboardingTextValue] = React.useState(
     typeof task.custom_fields?.onboarding_completion_text === 'string' ? task.custom_fields.onboarding_completion_text : ''
   );
-  const [onboardingProgressValue, setOnboardingProgressValue] = React.useState(() => {
-    const currentValue = parseProgressInput(task.custom_fields?.onboarding_completion_progress);
-    return currentValue === null ? '' : String(currentValue);
-  });
   const [hovered, setHovered] = React.useState(false);
   const nameInputRef = React.useRef<HTMLInputElement>(null);
   const onboardingInputRef = React.useRef<HTMLInputElement>(null);
-  const onboardingProgressInputRef = React.useRef<HTMLInputElement>(null);
-  const customProgressInputRef = React.useRef<HTMLInputElement>(null);
 
   const isExpanded = expandedIds.has(task.id);
   const hasChildren = task.children.length > 0;
@@ -138,6 +78,11 @@ const TaskRow: React.FC<TaskRowProps> = ({
     projectColor,
     getAppearanceColor(task.color, isProject ? '#F59E0B' : '#94A3B8')
   );
+  const progressFieldIds = React.useMemo(
+    () => columns.flatMap((column) => (column.field?.type === 'progress' ? [column.field.id] : [])),
+    [columns]
+  );
+  const progressEditable = isInProgressStatus(task.status, statusOptions);
 
   const saveName = () => {
     if (nameValue.trim() && nameValue !== task.name) {
@@ -159,8 +104,6 @@ const TaskRow: React.FC<TaskRowProps> = ({
     setOnboardingTextValue(
       typeof task.custom_fields?.onboarding_completion_text === 'string' ? task.custom_fields.onboarding_completion_text : ''
     );
-    const currentProgress = parseProgressInput(task.custom_fields?.onboarding_completion_progress);
-    setOnboardingProgressValue(currentProgress === null ? '' : String(currentProgress));
   }, [task.custom_fields]);
 
   const saveOnboardingText = () => {
@@ -176,58 +119,6 @@ const TaskRow: React.FC<TaskRowProps> = ({
       custom_fields: nextCustomFields,
     });
     setEditingOnboardingText(false);
-  };
-
-  const saveOnboardingProgress = () => {
-    const trimmedValue = onboardingProgressValue.trim();
-    const parsedValue = trimmedValue ? parseProgressInput(trimmedValue) : null;
-    if (trimmedValue && parsedValue === null) {
-      const fallbackProgress = parseProgressInput(task.custom_fields?.onboarding_completion_progress);
-      setOnboardingProgressValue(fallbackProgress === null ? '' : String(fallbackProgress));
-      setEditingOnboardingProgress(false);
-      return;
-    }
-
-    const nextCustomFields = { ...task.custom_fields };
-    if (parsedValue === null) {
-      delete nextCustomFields.onboarding_completion_progress;
-    } else {
-      nextCustomFields.onboarding_completion_progress = parsedValue;
-    }
-
-    onUpdate(task.id, {
-      onboarding_completion: null,
-      custom_fields: nextCustomFields,
-    });
-    setEditingOnboardingProgress(false);
-  };
-
-
-  const startCustomProgressEditing = (fieldId: string, value: CustomFieldValue) => {
-    const parsedValue = parseProgressInput(value);
-    setEditingCustomProgressFieldId(fieldId);
-    setCustomProgressValue(parsedValue === null ? '' : String(parsedValue));
-    setTimeout(() => customProgressInputRef.current?.select(), 10);
-  };
-
-  const saveCustomProgress = (fieldId: string, previousValue: CustomFieldValue) => {
-    const trimmedValue = customProgressValue.trim();
-    if (!trimmedValue) {
-      updateCustomFieldValue(fieldId, null);
-      setEditingCustomProgressFieldId(null);
-      return;
-    }
-
-    const parsedValue = parseProgressInput(trimmedValue);
-    if (parsedValue === null) {
-      const fallbackValue = parseProgressInput(previousValue);
-      setCustomProgressValue(fallbackValue === null ? '' : String(fallbackValue));
-      setEditingCustomProgressFieldId(null);
-      return;
-    }
-
-    updateCustomFieldValue(fieldId, parsedValue);
-    setEditingCustomProgressFieldId(null);
   };
 
   const visibleColumns = columns.filter((column) => column.visible);
@@ -250,23 +141,60 @@ const TaskRow: React.FC<TaskRowProps> = ({
     onUpdate(task.id, { custom_fields: nextCustomFields });
   };
 
-  const renderProgressValue = (value: number | null) => {
-    const hasValue = typeof value === 'number' && !Number.isNaN(value);
-    const progress = hasValue ? Math.max(0, Math.min(100, value)) : 0;
-    return (
-      <span className="flex min-w-0 items-center gap-2">
-        <span className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-gray-200">
-          <span
-            className={`block h-full rounded-full transition-[width] ${hasValue ? 'bg-blue-500' : 'bg-gray-300'}`}
-            style={{ width: `${progress}%` }}
-          />
-        </span>
-        <span className={`shrink-0 text-[11px] font-medium ${hasValue ? 'text-gray-500' : 'text-gray-400'}`}>
-          {hasValue ? `${progress}%` : 'Set'}
-        </span>
-      </span>
-    );
+  const getEffectiveProgressValue = (value: CustomFieldValue) => {
+    if (isCompletedStatus(task.status, statusOptions)) return 100;
+    if (isNotStartedStatus(task.status, statusOptions)) return null;
+    return parseProgressInput(value);
   };
+
+  const buildStatusBoundCustomFields = (nextStatus: string) => {
+    const nextCustomFields = { ...(task.custom_fields ?? {}) };
+
+    if (isCompletedStatus(nextStatus, statusOptions)) {
+      nextCustomFields.onboarding_completion_progress = 100;
+      progressFieldIds.forEach((fieldId) => {
+        nextCustomFields[fieldId] = 100;
+      });
+      return nextCustomFields;
+    }
+
+    if (isNotStartedStatus(nextStatus, statusOptions)) {
+      delete nextCustomFields.onboarding_completion_progress;
+      progressFieldIds.forEach((fieldId) => {
+        delete nextCustomFields[fieldId];
+      });
+    }
+
+    return nextCustomFields;
+  };
+
+  const handleStatusChange = (nextStatus: string) => {
+    const nextCustomFields = buildStatusBoundCustomFields(nextStatus);
+    const updatePayload: Partial<Task> = { status: nextStatus };
+    if (!areCustomFieldsEqual(task.custom_fields, nextCustomFields)) {
+      updatePayload.custom_fields = nextCustomFields;
+    }
+    onUpdate(task.id, updatePayload);
+  };
+
+  const handleOnboardingProgressCommit = (nextValue: number) => {
+    if (!progressEditable) return;
+    const nextCustomFields = {
+      ...(task.custom_fields ?? {}),
+      onboarding_completion_progress: nextValue,
+    };
+    onUpdate(task.id, {
+      onboarding_completion: null,
+      custom_fields: nextCustomFields,
+    });
+  };
+
+  const handleCustomProgressCommit = (fieldId: string, nextValue: number) => {
+    if (!progressEditable) return;
+    updateCustomFieldValue(fieldId, nextValue);
+  };
+
+  const renderProgressValue = (value: number | null) => <ProgressBadge value={value} compact emptyLabel="Set" />;
 
   const renderCustomValue = (value: CustomFieldValue, columnFieldType?: string) => {
     if (columnFieldType === 'date') {
@@ -282,7 +210,7 @@ const TaskRow: React.FC<TaskRowProps> = ({
     }
 
     if (columnFieldType === 'progress') {
-      return renderProgressValue(parseProgressInput(value));
+      return renderProgressValue(getEffectiveProgressValue(value));
     }
 
     if (columnFieldType === 'url' && typeof value === 'string' && value.trim()) {
@@ -426,7 +354,7 @@ const TaskRow: React.FC<TaskRowProps> = ({
                   status={task.status}
                   options={statusOptions}
                   editable
-                  onChange={(status) => onUpdate(task.id, { status })}
+                  onChange={handleStatusChange}
                   onAddOption={onAddStatusOption ? (option) => onAddStatusOption(task, option) : undefined}
                   onEditOption={onEditStatusOption ? (value, updates) => onEditStatusOption(task, value, updates) : undefined}
                 />
@@ -504,35 +432,18 @@ const TaskRow: React.FC<TaskRowProps> = ({
               );
             }
             if (columnType === 'progress') {
+              const onboardingProgress = getEffectiveProgressValue(task.custom_fields?.onboarding_completion_progress);
+
               return (
                 <td key={column.id} className="px-3 py-1.5">
-                  {editingOnboardingProgress ? (
-                    <ProgressEditor
-                      inputRef={onboardingProgressInputRef}
-                      value={onboardingProgressValue}
-                      onValueChange={setOnboardingProgressValue}
-                      onCommit={saveOnboardingProgress}
-                      onCancel={() => {
-                        const fallbackValue = parseProgressInput(task.custom_fields?.onboarding_completion_progress);
-                        setOnboardingProgressValue(fallbackValue === null ? '' : String(fallbackValue));
-                        setEditingOnboardingProgress(false);
-                      }}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const currentValue = parseProgressInput(task.custom_fields?.onboarding_completion_progress);
-                        setOnboardingProgressValue(currentValue === null ? '' : String(currentValue));
-                        setEditingOnboardingProgress(true);
-                        setTimeout(() => onboardingProgressInputRef.current?.select(), 10);
-                      }}
-                      className="w-full text-left text-xs text-gray-600 transition-colors hover:text-blue-600"
-                    >
-                      {renderProgressValue(parseProgressInput(task.custom_fields?.onboarding_completion_progress))}
-                    </button>
-                  )}
+                  <InteractiveProgressBar
+                    value={onboardingProgress}
+                    editable={progressEditable}
+                    onCommit={handleOnboardingProgressCommit}
+                    compact
+                    emptyLabel="Set"
+                    ariaLabel={`${task.name} progress`}
+                  />
                 </td>
               );
             }
@@ -543,7 +454,7 @@ const TaskRow: React.FC<TaskRowProps> = ({
                     status={task.status}
                     options={statusOptions}
                     editable
-                    onChange={(status) => onUpdate(task.id, { status })}
+                    onChange={handleStatusChange}
                     onAddOption={onAddStatusOption ? (option) => onAddStatusOption(task, option) : undefined}
                     onEditOption={onEditStatusOption ? (value, updates) => onEditStatusOption(task, value, updates) : undefined}
                   />
@@ -632,7 +543,7 @@ const TaskRow: React.FC<TaskRowProps> = ({
                   status={task.status}
                   options={statusOptions}
                   editable
-                  onChange={(status) => onUpdate(task.id, { status })}
+                  onChange={handleStatusChange}
                   onAddOption={onAddStatusOption ? (option) => onAddStatusOption(task, option) : undefined}
                   onEditOption={onEditStatusOption ? (nextValue, updates) => onEditStatusOption(task, nextValue, updates) : undefined}
                 />
@@ -693,35 +604,18 @@ const TaskRow: React.FC<TaskRowProps> = ({
           }
 
           if (column.field?.type === 'progress') {
-            const progressValue = parseProgressInput(value);
-            const isEditingProgress = editingCustomProgressFieldId === column.field.id;
+            const progressValue = getEffectiveProgressValue(value);
 
             return (
               <td key={column.id} className="px-3 py-1.5">
-                {isEditingProgress ? (
-                  <ProgressEditor
-                    inputRef={customProgressInputRef}
-                    value={customProgressValue}
-                    onValueChange={setCustomProgressValue}
-                    onCommit={() => saveCustomProgress(column.field!.id, value)}
-                    onCancel={() => {
-                      const fallbackValue = parseProgressInput(value);
-                      setCustomProgressValue(fallbackValue === null ? '' : String(fallbackValue));
-                      setEditingCustomProgressFieldId(null);
-                    }}
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startCustomProgressEditing(column.field!.id, value);
-                    }}
-                    className="w-full text-left text-xs text-gray-600 transition-colors hover:text-blue-600"
-                  >
-                    {renderProgressValue(progressValue)}
-                  </button>
-                )}
+                <InteractiveProgressBar
+                  value={progressValue}
+                  editable={progressEditable}
+                  onCommit={(nextValue) => handleCustomProgressCommit(column.field!.id, nextValue)}
+                  compact
+                  emptyLabel="Set"
+                  ariaLabel={`${task.name} ${column.label}`}
+                />
               </td>
             );
           }
