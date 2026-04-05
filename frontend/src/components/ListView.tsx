@@ -155,6 +155,10 @@ const ListView: React.FC<ListViewProps> = ({
   const [viewSettingsOpen, setViewSettingsOpen] = React.useState(false);
   const [listDisplayOpen, setListDisplayOpen] = React.useState(false);
   const listDisplayRef = React.useRef<HTMLDivElement>(null);
+  const [sortColumnId, setSortColumnId] = React.useState<string | null>(null);
+  const [sortDirection, setSortDirection] = React.useState<'asc' | 'desc'>('asc');
+  const [draggingColumnId, setDraggingColumnId] = React.useState<string | null>(null);
+  const [dragOverColumnId, setDragOverColumnId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -405,6 +409,52 @@ const ListView: React.FC<ListViewProps> = ({
       .filter((section) => !hasActiveFilters || section.tasks.length > 0);
   }, [focusMode, hideCompleted, searchQuery, sections, selectedStatuses]);
 
+  const sortedFilteredSections = React.useMemo(() => {
+    if (!sortColumnId) return filteredSections;
+
+    const getTaskValue = (task: Task): string => {
+      const col = columns.find((c) => c.id === sortColumnId);
+      if (!col) return '';
+      if (col.kind === 'builtin' && col.key) {
+        switch (col.key) {
+          case 'name': return task.name ?? '';
+          case 'status': return task.status ?? '';
+          case 'start_date': return task.start_date ?? '';
+          case 'end_date': return task.end_date ?? '';
+          case 'onboarding_completion': return task.onboarding_completion ?? '';
+          case 'task_type': return task.task_type ?? '';
+          default: return '';
+        }
+      }
+      if (col.kind === 'custom' && col.field) {
+        const v = task.custom_fields?.[col.field.id];
+        return v == null ? '' : String(v);
+      }
+      return '';
+    };
+
+    const sortTasks = (tasks: Task[]): Task[] => {
+      const sorted = [...tasks].sort((a, b) => {
+        const av = getTaskValue(a);
+        const bv = getTaskValue(b);
+        const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+        return sortDirection === 'asc' ? cmp : -cmp;
+      });
+      return sorted.map((t) => ({ ...t, children: sortTasks(t.children) }));
+    };
+
+    return filteredSections.map((section) => ({ ...section, tasks: sortTasks(section.tasks) }));
+  }, [columns, filteredSections, sortColumnId, sortDirection]);
+
+  const handleColumnHeaderClick = (columnId: string) => {
+    if (sortColumnId === columnId) {
+      setSortDirection((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortColumnId(columnId);
+      setSortDirection('asc');
+    }
+  };
+
   const visibleTaskCount = React.useMemo(
     () => filteredSections.reduce((sum, section) => sum + countTasks(section.tasks), 0),
     [filteredSections]
@@ -415,10 +465,10 @@ const ListView: React.FC<ListViewProps> = ({
   );
   const visibleTaskRows = React.useMemo(
     () =>
-      filteredSections.flatMap((section) =>
+      sortedFilteredSections.flatMap((section) =>
         flattenVisibleTaskRows(section.target.listId, section.tasks, expandedIds)
       ),
-    [expandedIds, filteredSections]
+    [expandedIds, sortedFilteredSections]
   );
 
   React.useEffect(() => {
@@ -1279,7 +1329,6 @@ const ListView: React.FC<ListViewProps> = ({
         onToggleAgenda={onToggleAgenda}
         mailNotificationCount={mailNotificationCount}
         extraActions={
-          <>
           <div className="relative" ref={listDisplayRef}>
             <button
               type="button"
@@ -1294,8 +1343,18 @@ const ListView: React.FC<ListViewProps> = ({
               Display
             </button>
             {listDisplayOpen && (
-              <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-[1rem] border border-slate-200 bg-white p-3 shadow-2xl">
+              <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-[1rem] border border-slate-200 bg-white p-3 shadow-2xl">
                 <div className="space-y-3">
+                  <div className="rounded-[1rem] border border-slate-200 bg-slate-50/70 p-1">
+                    <button
+                      type="button"
+                      onClick={onToggleDefaultTaskTreeExpanded}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${defaultTaskTreeExpanded ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                    >
+                      <span>Tasks open by default</span>
+                      <span>{defaultTaskTreeExpanded ? 'On' : 'Off'}</span>
+                    </button>
+                  </div>
                   <div>
                     <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
                       <span>Font size</span>
@@ -1322,50 +1381,6 @@ const ListView: React.FC<ListViewProps> = ({
               </div>
             )}
           </div>
-          <details className="relative z-30">
-            <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50">
-              <Columns size={14} />
-              Fields
-            </summary>
-            <div className="absolute right-0 top-full z-[90] mt-2 w-44 rounded-[1rem] border border-slate-200 bg-white p-2 shadow-2xl">
-              <div className="max-h-[68vh] space-y-2 overflow-y-auto">
-                {columns.map((column, index) => (
-                  <div key={column.id} className="flex items-center justify-between gap-3 text-xs text-slate-700">
-                    <label className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                      <span className="truncate">{column.label}</span>
-                      <input
-                        type="checkbox"
-                        checked={column.visible}
-                        onChange={(e) => toggleColumnVisibility(column.id, e.target.checked)}
-                        className="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                    </label>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => moveColumn(column.id, -1)}
-                        disabled={index === 0}
-                        className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-30"
-                        title="Move column left"
-                      >
-                        <ArrowUp size={12} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => moveColumn(column.id, 1)}
-                        disabled={index === columns.length - 1}
-                        className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 disabled:cursor-not-allowed disabled:opacity-30"
-                        title="Move column right"
-                      >
-                        <ArrowDown size={12} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </details>
-          </>
         }
       />
 
@@ -1381,7 +1396,34 @@ const ListView: React.FC<ListViewProps> = ({
               {visibleColumns.map((column) => (
                 <th
                   key={column.id}
-                  className="relative px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500"
+                  draggable
+                  onDragStart={() => setDraggingColumnId(column.id)}
+                  onDragEnd={() => { setDraggingColumnId(null); setDragOverColumnId(null); }}
+                  onDragOver={(event) => { event.preventDefault(); setDragOverColumnId(column.id); }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (draggingColumnId && draggingColumnId !== column.id) {
+                      const allIds = columns.map((c) => c.id);
+                      const fromIdx = allIds.indexOf(draggingColumnId);
+                      const toIdx = allIds.indexOf(column.id);
+                      if (fromIdx >= 0 && toIdx >= 0) {
+                        const next = [...allIds];
+                        next.splice(fromIdx, 1);
+                        next.splice(toIdx, 0, draggingColumnId);
+                        setActiveSavedViewId('');
+                        setActiveColumnOrder(next);
+                      }
+                    }
+                    setDraggingColumnId(null);
+                    setDragOverColumnId(null);
+                  }}
+                  className={`relative px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 select-none transition-colors ${
+                    dragOverColumnId === column.id && draggingColumnId !== column.id
+                      ? 'bg-blue-50'
+                      : draggingColumnId === column.id
+                      ? 'opacity-50'
+                      : ''
+                  }`}
                   onDoubleClick={() => startHeaderEditing(column.id)}
                   onContextMenu={(event) => {
                     if (!editableListTarget) return;
@@ -1407,11 +1449,21 @@ const ListView: React.FC<ListViewProps> = ({
                       autoFocus
                     />
                   ) : (
-                    <span className="cursor-text">{column.label}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleColumnHeaderClick(column.id)}
+                      className="flex items-center gap-1 cursor-pointer hover:text-gray-800"
+                      title="Click to sort"
+                    >
+                      <span>{column.label}</span>
+                      {sortColumnId === column.id ? (
+                        sortDirection === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />
+                      ) : null}
+                    </button>
                   )}
                   <button
                     type="button"
-                    onMouseDown={(event) => startResize(column.id, column.width, event.clientX)}
+                    onMouseDown={(event) => { event.stopPropagation(); startResize(column.id, column.width, event.clientX); }}
                     className="absolute right-0 top-0 h-full w-2 cursor-col-resize"
                     title="Resize column"
                   />
@@ -1420,14 +1472,14 @@ const ListView: React.FC<ListViewProps> = ({
             </tr>
           </thead>
           <tbody>
-            {filteredSections.length === 0 ? (
+            {sortedFilteredSections.length === 0 ? (
               <tr>
                 <td colSpan={visibleColumns.length || 1} className="py-12 text-center text-sm text-gray-400">
                   {sections.length === 0 ? 'No selected projects found.' : 'No tasks match the current filters.'}
                 </td>
               </tr>
             ) : (
-              filteredSections.map((section) => {
+              sortedFilteredSections.map((section) => {
                 const accentColor = getAppearanceColor(section.target.listColor, '#2563EB');
                 const sectionSettings = normalizeProjectSettings(section.target.listSettings);
                 const statusOptions = sectionSettings.statuses;

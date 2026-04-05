@@ -480,7 +480,7 @@ const CommunicationSection: React.FC<{
             {section.customerName || 'No customer name saved yet'}
           </p>
           <p className="mt-1 text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
-            {section.target.workspaceName} / {section.target.spaceName}
+            {section.target.spaceName}
           </p>
         </div>
 
@@ -1276,9 +1276,6 @@ const OutlookView: React.FC<OutlookViewProps> = ({
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           <div className="mx-auto max-w-5xl rounded-[1.75rem] border border-slate-200 bg-white px-6 py-6 shadow-sm">
-            <div className="mb-6 rounded-[1.2rem] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
-              Add one entry for each important email, decision, or manual note. Each project stays separate and reads newest to oldest.
-            </div>
             <div className="space-y-8">
               {sections.map((section) => (
                 <CommunicationSection

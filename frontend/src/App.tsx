@@ -338,7 +338,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-[1cm]">
             <CloudzoneWordmark />
             <div className="min-w-0">
-              <span className="text-sm font-bold text-gray-900">MyProPlanner</span>
+              <span className="text-[1.225rem] font-bold text-gray-900">Shlomi's Project Planner</span>
             </div>
           </div>
         </div>
