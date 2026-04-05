@@ -1065,7 +1065,12 @@ const OutlookView: React.FC<OutlookViewProps> = ({
   uiScale,
   onUiScaleChange,
 }) => {
-  const [showTree, setShowTree] = React.useState(false);
+  const [defaultTreeView, setDefaultTreeView] = React.useState(
+    () => localStorage.getItem('outlook_defaultTreeView') === 'true'
+  );
+  const [showTree, setShowTree] = React.useState(
+    () => localStorage.getItem('outlook_defaultTreeView') === 'true'
+  );
   const [newestFirst, setNewestFirst] = React.useState(true);
   const [displayOpen, setDisplayOpen] = React.useState(false);
   const displayRef = React.useRef<HTMLDivElement>(null);
@@ -1250,6 +1255,18 @@ const OutlookView: React.FC<OutlookViewProps> = ({
                       >
                         <span>Newest entries first</span>
                         <span>{newestFirst ? 'On' : 'Off'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !defaultTreeView;
+                          setDefaultTreeView(next);
+                          localStorage.setItem('outlook_defaultTreeView', String(next));
+                        }}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${defaultTreeView ? 'bg-emerald-50 text-emerald-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                      >
+                        <span>Tree view by default</span>
+                        <span>{defaultTreeView ? 'On' : 'Off'}</span>
                       </button>
                     </div>
                     <div>
