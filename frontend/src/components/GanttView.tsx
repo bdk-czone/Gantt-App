@@ -2626,8 +2626,6 @@ const GanttView: React.FC<GanttViewProps> = ({
           agendaNotificationCount={agendaNotificationCount}
           onToggleAgenda={onToggleAgenda}
           mailNotificationCount={mailNotificationCount}
-          uiScale={uiScale}
-          onUiScaleChange={onUiScaleChange}
           fillHeight={Boolean(plannerPanelHeight)}
           extraActions={
             <>

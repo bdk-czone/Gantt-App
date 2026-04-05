@@ -1,10 +1,7 @@
 import React from 'react';
-import { BarChart2, CalendarDays, Check, ChevronDown, Filter, List, Mail, RefreshCw, Settings2, Share2, Type, X } from 'lucide-react';
+import { BarChart2, CalendarDays, Check, ChevronDown, Filter, List, Mail, RefreshCw, Settings2, Share2, X } from 'lucide-react';
 import type { SavedView, SelectedListTarget, StatusOption, TaskFocusMode } from '../types';
 import cloudzoneBackground from '../assets/cloudzone-background.jpg';
-
-const UI_SCALE_OPTIONS = [0.9, 1, 1.1, 1.25];
-const UI_SCALE_LABELS: Record<number, string> = { 0.9: 'Small', 1: 'Normal', 1.1: 'Large', 1.25: 'XL' };
 
 type ViewMode = 'list' | 'gantt' | 'outlook';
 type OpenMenuId = 'filter' | null;
@@ -44,8 +41,6 @@ interface PlannerToolbarProps {
   extraActions?: React.ReactNode;
   subControls?: React.ReactNode;
   fillHeight?: boolean;
-  uiScale?: number;
-  onUiScaleChange?: (scale: number) => void;
 }
 
 const focusOptions: Array<{ value: TaskFocusMode; label: string }> = [
@@ -140,22 +135,8 @@ const PlannerToolbar: React.FC<PlannerToolbarProps> = ({
   extraActions,
   subControls,
   fillHeight = false,
-  uiScale,
-  onUiScaleChange,
 }) => {
   const [openMenu, setOpenMenu] = React.useState<OpenMenuId>(null);
-  const [displayOpen, setDisplayOpen] = React.useState(false);
-  const displayRef = React.useRef<HTMLDivElement>(null);
-
-  React.useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (displayRef.current && !displayRef.current.contains(e.target as Node)) {
-        setDisplayOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
   const menuBarRef = React.useRef<HTMLDivElement>(null);
   const closeMenuTimeoutRef = React.useRef<number | null>(null);
   const hasActiveFilters = searchQuery.trim().length > 0 || selectedStatuses.length > 0 || hideCompleted || focusMode !== 'all';
@@ -371,45 +352,6 @@ const PlannerToolbar: React.FC<PlannerToolbarProps> = ({
               </div>
             )}
           </div>
-
-          {/* Global Display button */}
-          {uiScale !== undefined && onUiScaleChange && (
-            <div className="relative" ref={displayRef}>
-              <button
-                type="button"
-                onClick={() => setDisplayOpen((v) => !v)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm transition-colors ${
-                  displayOpen
-                    ? 'border-blue-200 bg-blue-50 text-blue-700'
-                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                <Type size={14} />
-                Display
-              </button>
-              {displayOpen && (
-                <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-[1rem] border border-slate-200 bg-white p-3 shadow-2xl">
-                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Font scale</p>
-                  <div className="grid grid-cols-4 gap-1">
-                    {UI_SCALE_OPTIONS.map((scale) => (
-                      <button
-                        key={scale}
-                        type="button"
-                        onClick={() => { onUiScaleChange(scale); setDisplayOpen(false); }}
-                        className={`rounded-lg py-1.5 text-xs font-medium transition-colors ${
-                          uiScale === scale
-                            ? 'bg-blue-600 text-white'
-                            : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        {UI_SCALE_LABELS[scale]}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {extraActions}
         </div>

@@ -153,6 +153,18 @@ const ListView: React.FC<ListViewProps> = ({
   const [editingProjectTarget, setEditingProjectTarget] = React.useState<SelectedListTarget | null>(null);
   const [hoveredProjectId, setHoveredProjectId] = React.useState<string | null>(null);
   const [viewSettingsOpen, setViewSettingsOpen] = React.useState(false);
+  const [listDisplayOpen, setListDisplayOpen] = React.useState(false);
+  const listDisplayRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (listDisplayRef.current && !listDisplayRef.current.contains(e.target as Node)) {
+        setListDisplayOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [selectedStatuses, setSelectedStatuses] = React.useState<string[]>([]);
   const [hideCompleted, setHideCompleted] = React.useState(false);
@@ -1266,9 +1278,50 @@ const ListView: React.FC<ListViewProps> = ({
         agendaNotificationCount={agendaNotificationCount}
         onToggleAgenda={onToggleAgenda}
         mailNotificationCount={mailNotificationCount}
-        uiScale={uiScale}
-        onUiScaleChange={onUiScaleChange}
         extraActions={
+          <>
+          <div className="relative" ref={listDisplayRef}>
+            <button
+              type="button"
+              onClick={() => setListDisplayOpen((v) => !v)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm transition-colors ${
+                listDisplayOpen
+                  ? 'border-blue-200 bg-blue-50 text-blue-700'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Type size={14} />
+              Display
+            </button>
+            {listDisplayOpen && (
+              <div className="absolute left-0 top-full z-50 mt-2 w-72 rounded-[1rem] border border-slate-200 bg-white p-3 shadow-2xl">
+                <div className="space-y-3">
+                  <div>
+                    <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+                      <span>Font size</span>
+                      <span>{Math.round(uiScale * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={85}
+                      max={130}
+                      step={5}
+                      value={Math.round(uiScale * 100)}
+                      onChange={(e) => onUiScaleChange(Number(e.target.value) / 100)}
+                      className="w-full accent-blue-600"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { onUiScaleChange(1); setListDisplayOpen(false); }}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50"
+                  >
+                    Reset display
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
           <details className="relative z-30">
             <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50">
               <Columns size={14} />
@@ -1312,6 +1365,7 @@ const ListView: React.FC<ListViewProps> = ({
               </div>
             </div>
           </details>
+          </>
         }
       />
 

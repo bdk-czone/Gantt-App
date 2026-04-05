@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarClock, ChevronDown, ChevronRight, Mail, Pencil, Plus, Trash2, Type, User } from 'lucide-react';
+import { BarChart2, CalendarClock, ChevronDown, ChevronRight, List, Mail, Pencil, Plus, Trash2, Type, User } from 'lucide-react';
 import {
   extractCommunicationScreenshotText,
   generateCommunicationAIDraft,
@@ -22,9 +22,6 @@ import type {
   ProjectSettings,
   SelectedListTarget,
 } from '../types';
-
-const UI_SCALE_OPTIONS = [0.9, 1, 1.1, 1.25];
-const UI_SCALE_LABELS: Record<number, string> = { 0.9: 'Small', 1: 'Normal', 1.1: 'Large', 1.25: 'XL' };
 
 type ViewMode = 'list' | 'gantt' | 'outlook';
 
@@ -1161,26 +1158,44 @@ const OutlookView: React.FC<OutlookViewProps> = ({
         <div className="relative z-10">
           <div className="flex flex-wrap items-center justify-between gap-3">
             {/* View mode switcher */}
-            <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white p-1 shadow-sm">
-              {(['list', 'gantt', 'outlook'] as const).map((mode) => (
-                <button
-                  key={mode}
-                  type="button"
-                  onClick={() => onViewModeChange(mode)}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                    viewMode === mode ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                  }`}
-                >
-                  {mode === 'list' ? 'List' : mode === 'gantt' ? 'Gantt' : 'Outlook'}
-                  {mode === 'outlook' && mailNotificationCount > 0 && (
-                    <span className={`inline-flex min-w-[1.15rem] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold ${
-                      viewMode === 'outlook' ? 'bg-white/20 text-white' : 'bg-red-500 text-white'
-                    }`}>
-                      {mailNotificationCount > 99 ? '99+' : mailNotificationCount}
-                    </span>
-                  )}
-                </button>
-              ))}
+            <div className="flex items-center rounded-full border border-slate-200 bg-white/95 p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => onViewModeChange('list')}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  viewMode === 'list' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <List size={14} />
+                List
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewModeChange('gantt')}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  viewMode === 'gantt' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <BarChart2 size={14} />
+                Gantt
+              </button>
+              <button
+                type="button"
+                onClick={() => onViewModeChange('outlook')}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  viewMode === 'outlook' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}
+              >
+                <Mail size={14} />
+                Outlook
+                {mailNotificationCount > 0 && (
+                  <span className={`inline-flex min-w-[1.15rem] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold ${
+                    viewMode === 'outlook' ? 'bg-white/20 text-white' : 'bg-red-500 text-white'
+                  }`}>
+                    {mailNotificationCount > 99 ? '99+' : mailNotificationCount}
+                  </span>
+                )}
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -1188,7 +1203,7 @@ const OutlookView: React.FC<OutlookViewProps> = ({
               <button
                 type="button"
                 onClick={() => setShowTree((v) => !v)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm transition-colors ${
                   showTree
                     ? 'border-blue-300 bg-blue-600 text-white shadow-sm'
                     : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
@@ -1203,7 +1218,7 @@ const OutlookView: React.FC<OutlookViewProps> = ({
                 <button
                   type="button"
                   onClick={() => setDisplayOpen((v) => !v)}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm transition-colors ${
                     displayOpen
                       ? 'border-blue-200 bg-blue-50 text-blue-700'
                       : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
@@ -1213,23 +1228,30 @@ const OutlookView: React.FC<OutlookViewProps> = ({
                   Display
                 </button>
                 {displayOpen && (
-                  <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-[1rem] border border-slate-200 bg-white p-3 shadow-2xl">
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Font scale</p>
-                    <div className="grid grid-cols-4 gap-1">
-                      {UI_SCALE_OPTIONS.map((scale) => (
-                        <button
-                          key={scale}
-                          type="button"
-                          onClick={() => onUiScaleChange(scale)}
-                          className={`rounded-lg py-1.5 text-xs font-medium transition-colors ${
-                            uiScale === scale
-                              ? 'bg-blue-600 text-white'
-                              : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          {UI_SCALE_LABELS[scale]}
-                        </button>
-                      ))}
+                  <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-[1rem] border border-slate-200 bg-white p-3 shadow-2xl">
+                    <div className="space-y-3">
+                      <div>
+                        <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+                          <span>Font size</span>
+                          <span>{Math.round(uiScale * 100)}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={85}
+                          max={130}
+                          step={5}
+                          value={Math.round(uiScale * 100)}
+                          onChange={(e) => onUiScaleChange(Number(e.target.value) / 100)}
+                          className="w-full accent-blue-600"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => { onUiScaleChange(1); setDisplayOpen(false); }}
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50"
+                      >
+                        Reset display
+                      </button>
                     </div>
                   </div>
                 )}
