@@ -5,7 +5,8 @@
       "Bash(node_modules/.bin/tsc --noEmit)",
       "Bash(node_modules/.bin/tsc --noEmit -p tsconfig.app.json)",
       "Bash(tar -czf snapshots/MyProPlanner-stable-ProMax-V.6.tgz --exclude=.git --exclude=frontend/node_modules --exclude=frontend/dist --exclude=backend/node_modules --exclude=backend/dist --exclude=snapshots .)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Read(//Users/shlomibd/Library/CloudStorage/GoogleDrive-shlomibd@cloudzone.io/My Drive/Code_Repositories/**)"
     ]
   }
 }
