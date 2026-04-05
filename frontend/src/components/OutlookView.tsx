@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarClock, Mail, Pencil, Plus, Trash2, User } from 'lucide-react';
+import { CalendarClock, ChevronDown, ChevronRight, Mail, Pencil, Plus, Trash2, Type, User } from 'lucide-react';
 import {
   extractCommunicationScreenshotText,
   generateCommunicationAIDraft,
@@ -15,12 +15,16 @@ import {
 } from '../lib/mailSettings';
 import { parseCommunicationEmail } from '../lib/communicationLogParser';
 import { normalizeProjectSettings } from '../lib/projectSettings';
+import cloudzoneBackground from '../assets/cloudzone-background.jpg';
 import type {
   ProjectCommunicationDirection,
   ProjectCommunicationEntry,
   ProjectSettings,
   SelectedListTarget,
 } from '../types';
+
+const UI_SCALE_OPTIONS = [0.9, 1, 1.1, 1.25];
+const UI_SCALE_LABELS: Record<number, string> = { 0.9: 'Small', 1: 'Normal', 1.1: 'Large', 1.25: 'XL' };
 
 type ViewMode = 'list' | 'gantt' | 'outlook';
 
@@ -29,6 +33,8 @@ interface OutlookViewProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   mailNotificationCount: number;
+  uiScale: number;
+  onUiScaleChange: (scale: number) => void;
 }
 
 interface CommunicationDraft {
@@ -899,12 +905,180 @@ const CommunicationSection: React.FC<{
   );
 };
 
+// ── Communication Log Tree View ────────────────────────────────────────────────
+
+const CommunicationLogTree: React.FC<{
+  sections: SectionData[];
+  onSaveSettings: (listId: string, settings: ProjectSettings) => Promise<void>;
+  aiStatus: CommunicationAIStatus | null;
+}> = ({ sections, onSaveSettings, aiStatus }) => {
+  // Group sections by workspace → space
+  const grouped = React.useMemo(() => {
+    const wsMap = new Map<string, { wsName: string; spaces: Map<string, { spaceName: string; sections: SectionData[] }> }>();
+    for (const s of sections) {
+      if (!wsMap.has(s.target.workspaceId)) {
+        wsMap.set(s.target.workspaceId, { wsName: s.target.workspaceName, spaces: new Map() });
+      }
+      const ws = wsMap.get(s.target.workspaceId)!;
+      if (!ws.spaces.has(s.target.spaceId)) {
+        ws.spaces.set(s.target.spaceId, { spaceName: s.target.spaceName, sections: [] });
+      }
+      ws.spaces.get(s.target.spaceId)!.sections.push(s);
+    }
+    return wsMap;
+  }, [sections]);
+
+  const [collapsedWs, setCollapsedWs] = React.useState<Set<string>>(new Set());
+  const [collapsedSpaces, setCollapsedSpaces] = React.useState<Set<string>>(new Set());
+  const [collapsedProjects, setCollapsedProjects] = React.useState<Set<string>>(new Set());
+
+  const toggle = (set: Set<string>, setFn: React.Dispatch<React.SetStateAction<Set<string>>>, id: string) =>
+    setFn((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto p-5">
+      <div className="mx-auto max-w-5xl overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-sm">
+        {Array.from(grouped.entries()).map(([wsId, { wsName, spaces }]) => {
+          const wsCollapsed = collapsedWs.has(wsId);
+          const wsTotalEntries = Array.from(spaces.values()).reduce(
+            (n, sp) => n + sp.sections.reduce((m, s) => m + s.entries.length, 0), 0
+          );
+          return (
+            <div key={wsId} className="border-b border-slate-100 last:border-b-0">
+              {/* Workspace row */}
+              <button
+                type="button"
+                onClick={() => toggle(collapsedWs, setCollapsedWs, wsId)}
+                className="flex w-full items-center gap-2.5 bg-slate-50/60 px-5 py-3 text-left transition-colors hover:bg-slate-100/60"
+              >
+                <span className="text-slate-400">
+                  {wsCollapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                </span>
+                <span className="flex-1 text-[13px] font-semibold text-slate-800">{wsName}</span>
+                <span className="rounded-full bg-slate-200/80 px-2 py-0.5 text-[10px] font-medium text-slate-500">
+                  {wsTotalEntries} entr{wsTotalEntries !== 1 ? 'ies' : 'y'}
+                </span>
+              </button>
+
+              {!wsCollapsed && Array.from(spaces.entries()).map(([spaceId, { spaceName, sections: spaceSections }]) => {
+                const spaceCollapsed = collapsedSpaces.has(spaceId);
+                const spaceTotalEntries = spaceSections.reduce((n, s) => n + s.entries.length, 0);
+                return (
+                  <div key={spaceId}>
+                    {/* Space row */}
+                    <button
+                      type="button"
+                      onClick={() => toggle(collapsedSpaces, setCollapsedSpaces, spaceId)}
+                      className="flex w-full items-center gap-2.5 px-5 py-2.5 pl-10 text-left transition-colors hover:bg-slate-50"
+                    >
+                      <span className="text-slate-300">
+                        {spaceCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+                      </span>
+                      <span className="flex-1 text-[12px] font-medium text-slate-500 uppercase tracking-wider">{spaceName}</span>
+                      <span className="text-[10px] text-slate-400">{spaceTotalEntries}</span>
+                    </button>
+
+                    {!spaceCollapsed && spaceSections.map((section) => {
+                      const projCollapsed = collapsedProjects.has(section.target.listId);
+                      const sorted = [...section.entries].sort(
+                        (a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime()
+                      );
+                      return (
+                        <div key={section.target.listId} className="border-t border-slate-50">
+                          {/* Project row */}
+                          <button
+                            type="button"
+                            onClick={() => toggle(collapsedProjects, setCollapsedProjects, section.target.listId)}
+                            className="flex w-full items-center gap-2.5 py-2.5 pl-16 pr-5 text-left transition-colors hover:bg-slate-50"
+                          >
+                            <span className="text-slate-300">
+                              {projCollapsed ? <ChevronRight size={11} /> : <ChevronDown size={11} />}
+                            </span>
+                            <span className="flex-1 truncate text-[12.5px] font-semibold text-slate-700">
+                              {section.target.listName}
+                            </span>
+                            {section.customerName && (
+                              <span className="hidden truncate text-[10px] text-slate-400 sm:block max-w-[120px]">
+                                {section.customerName}
+                              </span>
+                            )}
+                            <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                              section.entries.length > 0
+                                ? 'bg-blue-50 text-blue-600'
+                                : 'bg-slate-100 text-slate-400'
+                            }`}>
+                              {section.entries.length}
+                            </span>
+                          </button>
+
+                          {/* Entries */}
+                          {!projCollapsed && sorted.length > 0 && (
+                            <div className="divide-y divide-slate-50 pb-2">
+                              {sorted.map((entry) => {
+                                const meta = directionMeta[entry.direction] ?? directionMeta.note;
+                                return (
+                                  <div
+                                    key={entry.id}
+                                    className="flex items-start gap-3 py-2 pl-20 pr-5 transition-colors hover:bg-slate-50/60"
+                                  >
+                                    <span className="mt-0.5 shrink-0 text-[10px] text-slate-400">
+                                      {formatOccurredAt(entry.occurredAt)}
+                                    </span>
+                                    <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${meta.className}`}>
+                                      {meta.label}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <p className="truncate text-[11.5px] font-medium text-slate-700">{entry.subject}</p>
+                                      {entry.summary && (
+                                        <p className="mt-0.5 line-clamp-1 text-[11px] text-slate-400">{entry.summary}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          {!projCollapsed && sorted.length === 0 && (
+                            <p className="py-2 pl-20 pr-5 text-[11px] text-slate-400">No entries yet.</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ── OutlookView ────────────────────────────────────────────────────────────────
+
 const OutlookView: React.FC<OutlookViewProps> = ({
   selectedLists,
   viewMode,
   onViewModeChange,
   mailNotificationCount,
+  uiScale,
+  onUiScaleChange,
 }) => {
+  const [showTree, setShowTree] = React.useState(false);
+  const [displayOpen, setDisplayOpen] = React.useState(false);
+  const displayRef = React.useRef<HTMLDivElement>(null);
+
+  // Close display panel on outside click
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (displayRef.current && !displayRef.current.contains(e.target as Node)) {
+        setDisplayOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
   const [settingsByListId, setSettingsByListId] = React.useState<Record<string, ProjectSettings | null>>({});
   const [aiStatus, setAiStatus] = React.useState<CommunicationAIStatus | null>(null);
 
@@ -969,63 +1143,133 @@ const OutlookView: React.FC<OutlookViewProps> = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-50">
-      <div className="border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white p-1 shadow-sm">
-            {(['list', 'gantt', 'outlook'] as const).map((mode) => (
+      {/* ── Toolbar ── */}
+      <div className="relative overflow-hidden border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div
+          className="pointer-events-none absolute inset-y-0 right-0 w-[34rem] opacity-[0.56]"
+          style={{
+            backgroundImage: `url(${cloudzoneBackground})`,
+            backgroundRepeat: 'no-repeat',
+            backgroundSize: 'cover',
+            backgroundPosition: 'right center',
+            maskImage: 'linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.65) 40%, rgba(0,0,0,0) 100%)',
+            WebkitMaskImage: 'linear-gradient(to left, rgba(0,0,0,1) 0%, rgba(0,0,0,0.65) 40%, rgba(0,0,0,0) 100%)',
+          }}
+        />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white via-white/88 to-white/74" />
+
+        <div className="relative z-10">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            {/* View mode switcher */}
+            <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+              {(['list', 'gantt', 'outlook'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => onViewModeChange(mode)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                    viewMode === mode ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  {mode === 'list' ? 'List' : mode === 'gantt' ? 'Gantt' : 'Outlook'}
+                  {mode === 'outlook' && mailNotificationCount > 0 && (
+                    <span className={`inline-flex min-w-[1.15rem] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold ${
+                      viewMode === 'outlook' ? 'bg-white/20 text-white' : 'bg-red-500 text-white'
+                    }`}>
+                      {mailNotificationCount > 99 ? '99+' : mailNotificationCount}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Tree / Flat toggle */}
               <button
-                key={mode}
                 type="button"
-                onClick={() => onViewModeChange(mode)}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  viewMode === mode ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                onClick={() => setShowTree((v) => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                  showTree
+                    ? 'border-blue-300 bg-blue-600 text-white shadow-sm'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                {mode === 'list' ? 'List' : mode === 'gantt' ? 'Gantt' : 'Outlook'}
-                {mode === 'outlook' && mailNotificationCount > 0 && (
-                  <span
-                    className={`inline-flex min-w-[1.15rem] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold ${
-                      viewMode === 'outlook' ? 'bg-white/20 text-white' : 'bg-red-500 text-white'
-                    }`}
-                  >
-                    {mailNotificationCount > 99 ? '99+' : mailNotificationCount}
-                  </span>
-                )}
+                {showTree ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                Tree
               </button>
-            ))}
+
+              {/* Display button */}
+              <div className="relative" ref={displayRef}>
+                <button
+                  type="button"
+                  onClick={() => setDisplayOpen((v) => !v)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors ${
+                    displayOpen
+                      ? 'border-blue-200 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Type size={14} />
+                  Display
+                </button>
+                {displayOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-[1rem] border border-slate-200 bg-white p-3 shadow-2xl">
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-slate-400">Font scale</p>
+                    <div className="grid grid-cols-4 gap-1">
+                      {UI_SCALE_OPTIONS.map((scale) => (
+                        <button
+                          key={scale}
+                          type="button"
+                          onClick={() => onUiScaleChange(scale)}
+                          className={`rounded-lg py-1.5 text-xs font-medium transition-colors ${
+                            uiScale === scale
+                              ? 'bg-blue-600 text-white'
+                              : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+                          }`}
+                        >
+                          {UI_SCALE_LABELS[scale]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-            {totalEntries} total entr{totalEntries === 1 ? 'y' : 'ies'} across {sections.length} project{sections.length === 1 ? '' : 's'}
+          <div className="mt-3">
+            <h2 className="text-lg font-semibold text-slate-900">Customer Communication Log</h2>
+            <p className="text-sm text-slate-500">
+              {showTree
+                ? 'Tree view — all projects and entries grouped by workspace and space.'
+                : 'Keep one simple, chronological history per project so the case flow stays easy to read.'}
+            </p>
           </div>
-        </div>
-
-        <div className="mt-3">
-          <h2 className="text-lg font-semibold text-slate-900">Customer Communication Log</h2>
-          <p className="text-sm text-slate-500">
-            Keep one simple, chronological history per project so the case flow stays easy to read.
-          </p>
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-5">
-        <div className="mx-auto max-w-5xl rounded-[1.75rem] border border-slate-200 bg-white px-6 py-6 shadow-sm">
-          <div className="mb-6 rounded-[1.2rem] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
-            Add one entry for each important email, decision, or manual note. Each project stays separate and reads newest to oldest.
-          </div>
-
-          <div className="space-y-8">
-            {sections.map((section) => (
-              <CommunicationSection
-                key={section.target.listId}
-                section={section}
-                onSaveSettings={handleSaveSettings}
-                aiStatus={aiStatus}
-              />
-            ))}
+      {/* ── Content ── */}
+      {showTree ? (
+        <CommunicationLogTree sections={sections} onSaveSettings={handleSaveSettings} aiStatus={aiStatus} />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          <div className="mx-auto max-w-5xl rounded-[1.75rem] border border-slate-200 bg-white px-6 py-6 shadow-sm">
+            <div className="mb-6 rounded-[1.2rem] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600">
+              Add one entry for each important email, decision, or manual note. Each project stays separate and reads newest to oldest.
+            </div>
+            <div className="space-y-8">
+              {sections.map((section) => (
+                <CommunicationSection
+                  key={section.target.listId}
+                  section={section}
+                  onSaveSettings={handleSaveSettings}
+                  aiStatus={aiStatus}
+                />
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

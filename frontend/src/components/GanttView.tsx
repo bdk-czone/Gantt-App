@@ -56,6 +56,8 @@ interface GanttViewProps {
   agendaNotificationCount: number;
   onToggleAgenda: () => void;
   mailNotificationCount: number;
+  uiScale: number;
+  onUiScaleChange: (scale: number) => void;
 }
 
 interface TaskSection {
@@ -670,6 +672,8 @@ const GanttView: React.FC<GanttViewProps> = ({
   agendaNotificationCount,
   onToggleAgenda,
   mailNotificationCount,
+  uiScale,
+  onUiScaleChange,
 }) => {
   const [sections, setSections] = React.useState<TaskSection[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -2622,6 +2626,8 @@ const GanttView: React.FC<GanttViewProps> = ({
           agendaNotificationCount={agendaNotificationCount}
           onToggleAgenda={onToggleAgenda}
           mailNotificationCount={mailNotificationCount}
+          uiScale={uiScale}
+          onUiScaleChange={onUiScaleChange}
           fillHeight={Boolean(plannerPanelHeight)}
           extraActions={
             <>

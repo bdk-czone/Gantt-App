@@ -416,6 +416,8 @@ const App: React.FC = () => {
                   agendaNotificationCount={triggeredReminders.length}
                   onToggleAgenda={toggleAgenda}
                   mailNotificationCount={0}
+                  uiScale={uiScale}
+                  onUiScaleChange={setUiScale}
                 />
               ) : viewMode === 'gantt' ? (
                 <GanttView
@@ -429,6 +431,8 @@ const App: React.FC = () => {
                   agendaNotificationCount={triggeredReminders.length}
                   onToggleAgenda={toggleAgenda}
                   mailNotificationCount={0}
+                  uiScale={uiScale}
+                  onUiScaleChange={setUiScale}
                 />
               ) : (
                 <OutlookView
@@ -436,6 +440,8 @@ const App: React.FC = () => {
                   viewMode={viewMode}
                   onViewModeChange={setViewMode}
                   mailNotificationCount={0}
+                  uiScale={uiScale}
+                  onUiScaleChange={setUiScale}
                 />
               )}
             </div>

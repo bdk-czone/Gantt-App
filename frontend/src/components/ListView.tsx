@@ -36,6 +36,8 @@ interface ListViewProps {
   agendaNotificationCount: number;
   onToggleAgenda: () => void;
   mailNotificationCount: number;
+  uiScale: number;
+  onUiScaleChange: (scale: number) => void;
 }
 
 interface TaskSection {
@@ -135,6 +137,8 @@ const ListView: React.FC<ListViewProps> = ({
   agendaNotificationCount,
   onToggleAgenda,
   mailNotificationCount,
+  uiScale,
+  onUiScaleChange,
 }) => {
   const [sections, setSections] = React.useState<TaskSection[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -1262,6 +1266,8 @@ const ListView: React.FC<ListViewProps> = ({
         agendaNotificationCount={agendaNotificationCount}
         onToggleAgenda={onToggleAgenda}
         mailNotificationCount={mailNotificationCount}
+        uiScale={uiScale}
+        onUiScaleChange={onUiScaleChange}
         extraActions={
           <details className="relative z-30">
             <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-50">
