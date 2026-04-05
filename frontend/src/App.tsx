@@ -338,7 +338,15 @@ const App: React.FC = () => {
           <div className="flex items-center gap-[1cm]">
             <CloudzoneWordmark />
             <div className="min-w-0">
-              <span className="text-[1.225rem] font-bold text-gray-900">Shlomi's Project Planner</span>
+              <span
+                className="text-[1.225rem] font-extrabold text-gray-900"
+                style={{
+                  fontFamily: '"Nunito", "Varela Round", "Quicksand", "Trebuchet MS", system-ui, sans-serif',
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                Shlomi's Project Planner
+              </span>
             </div>
           </div>
         </div>

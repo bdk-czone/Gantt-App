@@ -107,7 +107,7 @@ const PlannerToolbar: React.FC<PlannerToolbarProps> = ({
       />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-white via-white/88 to-white/74" />
 
-      <div className="relative z-10 flex min-h-[5.75rem] flex-col justify-between gap-2">
+      <div className="relative z-20 flex min-h-[5.75rem] flex-col justify-between gap-2">
         {/* Row 1: View mode switcher + accessories */}
         <div className="flex min-h-[2.5rem] flex-wrap items-center gap-2">
           {viewMode && onViewModeChange && (

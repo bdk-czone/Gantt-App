@@ -131,7 +131,8 @@ const CommunicationSection: React.FC<{
   section: SectionData;
   onSaveSettings: (listId: string, nextSettings: ProjectSettings) => Promise<void>;
   aiStatus: CommunicationAIStatus | null;
-}> = ({ section, onSaveSettings, aiStatus }) => {
+  newestFirst: boolean;
+}> = ({ section, onSaveSettings, aiStatus, newestFirst }) => {
   const [composerOpen, setComposerOpen] = React.useState(section.entries.length === 0);
   const [editingEntryId, setEditingEntryId] = React.useState<string | null>(null);
   const [draft, setDraft] = React.useState<CommunicationDraft>(() => createDraft());
@@ -146,10 +147,12 @@ const CommunicationSection: React.FC<{
   const [ocrFallbackWarning, setOcrFallbackWarning] = React.useState<string | null>(null);
   const sortedEntries = React.useMemo(
     () =>
-      [...section.entries].sort(
-        (left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime()
+      [...section.entries].sort((left, right) =>
+        newestFirst
+          ? new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime()
+          : new Date(left.occurredAt).getTime() - new Date(right.occurredAt).getTime()
       ),
-    [section.entries]
+    [section.entries, newestFirst]
   );
 
   React.useEffect(() => {
@@ -1063,6 +1066,7 @@ const OutlookView: React.FC<OutlookViewProps> = ({
   onUiScaleChange,
 }) => {
   const [showTree, setShowTree] = React.useState(false);
+  const [newestFirst, setNewestFirst] = React.useState(true);
   const [displayOpen, setDisplayOpen] = React.useState(false);
   const displayRef = React.useRef<HTMLDivElement>(null);
 
@@ -1141,7 +1145,7 @@ const OutlookView: React.FC<OutlookViewProps> = ({
   return (
     <div className="flex h-full min-h-0 flex-col bg-slate-50">
       {/* ── Toolbar ── */}
-      <div className="relative overflow-hidden border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div className="relative overflow-visible border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
         <div
           className="pointer-events-none absolute inset-y-0 right-0 w-[34rem] opacity-[0.56]"
           style={{
@@ -1157,48 +1161,48 @@ const OutlookView: React.FC<OutlookViewProps> = ({
 
         <div className="relative z-10">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            {/* View mode switcher */}
-            <div className="flex items-center rounded-full border border-slate-200 bg-white/95 p-1 shadow-sm">
-              <button
-                type="button"
-                onClick={() => onViewModeChange('list')}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  viewMode === 'list' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <List size={14} />
-                List
-              </button>
-              <button
-                type="button"
-                onClick={() => onViewModeChange('gantt')}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  viewMode === 'gantt' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <BarChart2 size={14} />
-                Gantt
-              </button>
-              <button
-                type="button"
-                onClick={() => onViewModeChange('outlook')}
-                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
-                  viewMode === 'outlook' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}
-              >
-                <Mail size={14} />
-                Outlook
-                {mailNotificationCount > 0 && (
-                  <span className={`inline-flex min-w-[1.15rem] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold ${
-                    viewMode === 'outlook' ? 'bg-white/20 text-white' : 'bg-red-500 text-white'
-                  }`}>
-                    {mailNotificationCount > 99 ? '99+' : mailNotificationCount}
-                  </span>
-                )}
-              </button>
-            </div>
-
+            {/* Left group: View mode switcher + Tree button */}
             <div className="flex items-center gap-2">
+              <div className="flex items-center rounded-full border border-slate-200 bg-white/95 p-1 shadow-sm">
+                <button
+                  type="button"
+                  onClick={() => onViewModeChange('list')}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                    viewMode === 'list' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <List size={14} />
+                  List
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewModeChange('gantt')}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                    viewMode === 'gantt' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <BarChart2 size={14} />
+                  Gantt
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onViewModeChange('outlook')}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm transition-colors ${
+                    viewMode === 'outlook' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`}
+                >
+                  <Mail size={14} />
+                  Outlook
+                  {mailNotificationCount > 0 && (
+                    <span className={`inline-flex min-w-[1.15rem] items-center justify-center rounded-full px-1.5 text-[10px] font-semibold ${
+                      viewMode === 'outlook' ? 'bg-white/20 text-white' : 'bg-red-500 text-white'
+                    }`}>
+                      {mailNotificationCount > 99 ? '99+' : mailNotificationCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+
               {/* Tree / Flat toggle */}
               <button
                 type="button"
@@ -1213,49 +1217,67 @@ const OutlookView: React.FC<OutlookViewProps> = ({
                 Tree
               </button>
 
-              {/* Display button */}
+              {/* Display button — next to Tree */}
               <div className="relative" ref={displayRef}>
-                <button
-                  type="button"
-                  onClick={() => setDisplayOpen((v) => !v)}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm transition-colors ${
-                    displayOpen
-                      ? 'border-blue-200 bg-blue-50 text-blue-700'
-                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  <Type size={14} />
-                  Display
-                </button>
-                {displayOpen && (
-                  <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-[1rem] border border-slate-200 bg-white p-3 shadow-2xl">
-                    <div className="space-y-3">
-                      <div>
-                        <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
-                          <span>Font size</span>
-                          <span>{Math.round(uiScale * 100)}%</span>
-                        </div>
-                        <input
-                          type="range"
-                          min={85}
-                          max={130}
-                          step={5}
-                          value={Math.round(uiScale * 100)}
-                          onChange={(e) => onUiScaleChange(Number(e.target.value) / 100)}
-                          className="w-full accent-blue-600"
-                        />
-                      </div>
+              <button
+                type="button"
+                onClick={() => setDisplayOpen((v) => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-2 text-sm transition-colors ${
+                  displayOpen
+                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                <Type size={14} />
+                Display
+              </button>
+              {displayOpen && (
+                <div className="absolute left-0 top-full z-50 mt-2 w-80 rounded-[1rem] border border-slate-200 bg-white p-3 shadow-2xl">
+                  <div className="space-y-3">
+                    <div className="rounded-[1rem] border border-slate-200 bg-slate-50/70 p-1">
                       <button
                         type="button"
-                        onClick={() => { onUiScaleChange(1); setDisplayOpen(false); }}
-                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50"
+                        onClick={() => setShowTree((v) => !v)}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${showTree ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
                       >
-                        Reset display
+                        <span>Tree view</span>
+                        <span>{showTree ? 'On' : 'Off'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewestFirst((v) => !v)}
+                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${newestFirst ? 'bg-violet-50 text-violet-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                      >
+                        <span>Newest entries first</span>
+                        <span>{newestFirst ? 'On' : 'Off'}</span>
                       </button>
                     </div>
+                    <div>
+                      <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+                        <span>Font size</span>
+                        <span>{Math.round(uiScale * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min={85}
+                        max={130}
+                        step={5}
+                        value={Math.round(uiScale * 100)}
+                        onChange={(e) => onUiScaleChange(Number(e.target.value) / 100)}
+                        className="w-full accent-blue-600"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { onUiScaleChange(1); setDisplayOpen(false); }}
+                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-700 transition-colors hover:bg-slate-50"
+                    >
+                      Reset display
+                    </button>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+            </div>
             </div>
           </div>
 
@@ -1283,6 +1305,7 @@ const OutlookView: React.FC<OutlookViewProps> = ({
                   section={section}
                   onSaveSettings={handleSaveSettings}
                   aiStatus={aiStatus}
+                  newestFirst={newestFirst}
                 />
               ))}
             </div>

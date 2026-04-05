@@ -1348,8 +1348,16 @@ const ListView: React.FC<ListViewProps> = ({
                   <div className="rounded-[1rem] border border-slate-200 bg-slate-50/70 p-1">
                     <button
                       type="button"
+                      onClick={() => setHideCompleted((v) => !v)}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${hideCompleted ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                    >
+                      <span>Hide completed</span>
+                      <span>{hideCompleted ? 'On' : 'Off'}</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={onToggleDefaultTaskTreeExpanded}
-                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${defaultTaskTreeExpanded ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'}`}
+                      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-xs transition-colors ${defaultTaskTreeExpanded ? 'bg-violet-50 text-violet-700' : 'text-slate-700 hover:bg-slate-50'}`}
                     >
                       <span>Tasks open by default</span>
                       <span>{defaultTaskTreeExpanded ? 'On' : 'Off'}</span>
